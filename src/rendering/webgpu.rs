@@ -13,6 +13,7 @@ const WEBGPU_CULL_MODE: wgpu::Face = wgpu::Face::Back;
 
 pub struct WebGPUInterface<'a> {
     pub surface: wgpu::Surface<'a>,
+    pub _adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub swapchain_format: wgpu::TextureFormat,
@@ -147,6 +148,7 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
 
     let interface: WebGPUInterface<'_> = WebGPUInterface {
         surface,
+        _adapter: adapter,
         device,
         queue,
         swapchain_format,
@@ -633,13 +635,13 @@ pub fn update_phong_shading(
 
     let scene_value = scene.borrow();
 
-    let eye: glam::Vec3 = scene_value.scene_variables.eye_location;
-    let direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
+    let eye: glam::Vec3 = scene_value.variables.eye_location;
+    let direction: glam::Vec3 = scene_value.variables.eye_direction;
 
     let mut model_matrix = glam::Mat4::from_cols_array_2d(&object.world_transform);
 
     // Force Y-up to Z-up
-    if scene_value.scene_variables.convert_y_to_z {
+    if scene_value.variables.convert_y_to_z {
         let y_to_z_mat: glam::Mat4 =
             glam::Mat4::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
         model_matrix = y_to_z_mat * model_matrix;
@@ -650,8 +652,8 @@ pub fn update_phong_shading(
         glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
     let transform_matrix: glam::Mat4 = projection_matrix * view_matrix * model_matrix;
 
-    let directional: [f32; 3] = scene_value.scene_variables.directional_light_angle;
-    let ambient: [f32; 4] = scene_value.scene_variables.ambient_light_color;
+    let directional: [f32; 3] = scene_value.variables.directional_light_angle;
+    let ambient: [f32; 4] = scene_value.variables.ambient_light_color;
     let inverse_projection: glam::Mat4 = transform_matrix.inverse();
 
     let rotaton_matrix: glam::Mat4 =
@@ -664,7 +666,7 @@ pub fn update_phong_shading(
     uniform_total.extend_from_slice(&ambient);
     uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
     uniform_total.extend_from_slice(&[
-        scene_value.scene_variables.differed_debug_type as f32,
+        scene_value.variables.differed_debug_type as f32,
         0.0,
         0.0,
         0.0,
@@ -731,10 +733,10 @@ pub fn render_forward_shading_main(
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: scene_value.scene_variables.background_color[0] as f64,
-                            g: scene_value.scene_variables.background_color[1] as f64,
-                            b: scene_value.scene_variables.background_color[2] as f64,
-                            a: scene_value.scene_variables.background_color[3] as f64,
+                            r: scene_value.variables.background_color[0] as f64,
+                            g: scene_value.variables.background_color[1] as f64,
+                            b: scene_value.variables.background_color[2] as f64,
+                            a: scene_value.variables.background_color[3] as f64,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -830,12 +832,12 @@ pub fn init_differed_gbuffer_pipeline(
         let scene_borrow = scene.borrow();
         let scene_mterials = &scene_borrow.materials;
 
-        let render_objects: Vec<engine::scene::SceneObject> =
-            if scene_borrow.scene_variables.use_batched {
-                scene_borrow.batched_objects.clone()
-            } else {
-                scene_borrow.objects.clone()
-            };
+        let render_objects: Vec<engine::scene::SceneObject> = if scene_borrow.variables.use_batched
+        {
+            scene_borrow.batched_objects.clone()
+        } else {
+            scene_borrow.objects.clone()
+        };
 
         for i in 0..render_objects.len() {
             let object_borrow = render_objects.get(i).unwrap();
@@ -857,7 +859,7 @@ pub fn init_differed_gbuffer_pipeline(
         let mut scene_borrow = scene.borrow_mut();
 
         let render_objects: &mut Vec<engine::scene::SceneObject> =
-            if scene_borrow.scene_variables.use_batched {
+            if scene_borrow.variables.use_batched {
                 &mut scene_borrow.batched_objects
             } else {
                 &mut scene_borrow.objects
@@ -1338,13 +1340,13 @@ fn update_differed_gbuffers_shading(
     let aspect_ratio: f32 = width as f32 / height as f32;
 
     let scene_value = scene.borrow();
-    let eye: glam::Vec3 = scene_value.scene_variables.eye_location;
-    let direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
+    let eye: glam::Vec3 = scene_value.variables.eye_location;
+    let direction: glam::Vec3 = scene_value.variables.eye_direction;
 
     let mut model_matrix = glam::Mat4::from_cols_array_2d(&object.world_transform);
 
     // Force Y-up to Z-up
-    if scene_value.scene_variables.convert_y_to_z {
+    if scene_value.variables.convert_y_to_z {
         let y_to_z_mat: glam::Mat4 =
             glam::Mat4::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
         model_matrix = y_to_z_mat * model_matrix;
@@ -1719,8 +1721,8 @@ pub fn update_differed_buffer(
 
     let scene_value = scene.borrow();
 
-    let eye: glam::Vec3 = scene_value.scene_variables.eye_location;
-    let direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
+    let eye: glam::Vec3 = scene_value.variables.eye_location;
+    let direction: glam::Vec3 = scene_value.variables.eye_direction;
 
     // Create matrices and write buffer
     let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
@@ -1728,8 +1730,8 @@ pub fn update_differed_buffer(
         glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
     let transform_matrix: glam::Mat4 = projection_matrix * view_matrix;
 
-    let directional: [f32; 3] = scene_value.scene_variables.directional_light_angle;
-    let ambient: [f32; 4] = scene_value.scene_variables.ambient_light_color;
+    let directional: [f32; 3] = scene_value.variables.directional_light_angle;
+    let ambient: [f32; 4] = scene_value.variables.ambient_light_color;
     let inverse_projection: glam::Mat4 = transform_matrix.inverse();
 
     let mut uniform_total: Vec<f32> = Vec::new();
@@ -1738,7 +1740,7 @@ pub fn update_differed_buffer(
     uniform_total.extend_from_slice(&ambient);
     uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
     uniform_total.extend_from_slice(&[
-        scene_value.scene_variables.differed_debug_type as f32,
+        scene_value.variables.differed_debug_type as f32,
         0.0,
         0.0,
         0.0,
@@ -1756,7 +1758,7 @@ pub fn update_differed_shading(
     differed_resource: &WebGPUDifferedResource,
 ) {
     // Update gbuffer
-    if scene.borrow().scene_variables.use_batched == false {
+    if scene.borrow().variables.use_batched == false {
         for scene_object in &scene.as_ref().borrow().objects {
             if scene_object.shading_type == 0 {
                 update_differed_gbuffers_shading(&scene, &interface, &scene_object);
@@ -1875,7 +1877,7 @@ pub fn render_differed_shading_main(
                 occlusion_query_set: None,
             });
 
-        if scene.borrow().scene_variables.use_batched == false {
+        if scene.borrow().variables.use_batched == false {
             for object in scene.borrow().objects.iter() {
                 if object.shading_type == 0 {
                     gbuffer_pass.set_pipeline(
@@ -2034,10 +2036,10 @@ pub fn render_differed_shading_main(
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: scene_value.scene_variables.background_color[0] as f64,
-                            g: scene_value.scene_variables.background_color[1] as f64,
-                            b: scene_value.scene_variables.background_color[2] as f64,
-                            a: scene_value.scene_variables.background_color[3] as f64,
+                            r: scene_value.variables.background_color[0] as f64,
+                            g: scene_value.variables.background_color[1] as f64,
+                            b: scene_value.variables.background_color[2] as f64,
+                            a: scene_value.variables.background_color[3] as f64,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -2047,7 +2049,7 @@ pub fn render_differed_shading_main(
                 occlusion_query_set: None,
             });
 
-        if scene_value.scene_variables.differed_debug_type == 0 {
+        if scene_value.variables.differed_debug_type == 0 {
             differed_pass.set_pipeline(&differed_resource.render_pipeline);
         } else {
             differed_pass.set_pipeline(&differed_resource.debug_pipeline);

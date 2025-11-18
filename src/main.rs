@@ -1,7 +1,7 @@
 mod engine;
-mod frontend;
 mod rendering;
 mod types;
+mod web;
 
 use crate::{
     rendering::webgpu::{self, create_shader_resource},
@@ -70,13 +70,13 @@ pub async fn main() {
     }
 
     // Javascript controls
-    let control_response_js: Shared<frontend::eventlistener::ControlResponseJs> = std::rc::Rc::new(
-        std::cell::RefCell::new(frontend::eventlistener::ControlResponseJs::default()),
+    let control_response_js: Shared<web::eventlistener::ControlResponseJs> = std::rc::Rc::new(
+        std::cell::RefCell::new(web::eventlistener::ControlResponseJs::default()),
     );
-    frontend::eventlistener::add_event_listener_control(&control_response_js);
+    web::eventlistener::add_event_listener_control(&control_response_js);
 
     // Frontend GUI
-    frontend::gui::start_gui(&scene);
+    web::gui::start_gui(&scene);
 
     // Rendering loop
     let f: Shared<Option<_>> = std::rc::Rc::new(std::cell::RefCell::new(None));
@@ -84,8 +84,7 @@ pub async fn main() {
     *g.borrow_mut() = Some(wasm_bindgen::closure::Closure::wrap(Box::new(move || {
         engine::scene::update_control(&scene, &control_response_js);
 
-        let shading_type: engine::scene::ShadingType =
-            scene.borrow().scene_variables.scene_shading_type;
+        let shading_type: engine::scene::ShadingType = scene.borrow().variables.scene_shading_type;
 
         match shading_type {
             engine::scene::ShadingType::Forward => {
@@ -130,8 +129,8 @@ pub async fn main() {
             _ => {}
         }
 
-        if scene.borrow().scene_variables.is_first_update {
-            scene.borrow_mut().scene_variables.is_first_update = false;
+        if scene.borrow().variables.is_first_update {
+            scene.borrow_mut().variables.is_first_update = false;
             debug_log_with_time("Render OK");
         }
 

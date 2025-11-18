@@ -1,16 +1,16 @@
 use crate::types::Shared;
-use crate::{frontend, rendering};
+use crate::{rendering, web};
 use glam::Vec4Swizzles;
 
 // Scene definision
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Scene {
     // own
     pub objects: Vec<SceneObject>,
     pub materials: Vec<SceneMaterial>,
     pub batched_objects: Vec<SceneObject>,
-    pub scene_variables: SceneVariables,
+    pub variables: SceneVariables,
 }
 
 #[derive(Clone, Default)]
@@ -38,7 +38,7 @@ pub struct SceneMaterial {
     pub metallic_roughness_texture_size: [u32; 2],
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct SceneVariables {
     // rendering variables
     pub eye_location: glam::Vec3,
@@ -70,7 +70,7 @@ impl Scene {
             objects: [].to_vec(),
             batched_objects: [].to_vec(),
             materials: [].to_vec(),
-            scene_variables: SceneVariables::new(),
+            variables: SceneVariables::new(),
         }
     }
 }
@@ -84,7 +84,7 @@ impl SceneVariables {
                 z: 0.0,
             },
             eye_direction: glam::Vec3::Y,
-            directional_light_angle: [1.0, 1.0, -1.0],
+            directional_light_angle: [0.5, 1.0, -1.0],
             ambient_light_color: [0.0, 0.0, 0.0, 1.0],
             background_color: [0.7, 0.7, 0.7, 1.0],
             scene_shading_type: ShadingType::Forward,
@@ -174,11 +174,11 @@ pub fn batch_objects(scene: &Shared<Scene>) {
 
 pub fn update_control(
     scene: &Shared<Scene>,
-    in_control_event: &Shared<frontend::eventlistener::ControlResponseJs>,
+    in_control_event: &Shared<web::eventlistener::ControlResponseJs>,
 ) {
     let mut scene_value = scene.borrow_mut();
-    let mut eye: glam::Vec3 = scene_value.scene_variables.eye_location;
-    let mut direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
+    let mut eye: glam::Vec3 = scene_value.variables.eye_location;
+    let mut direction: glam::Vec3 = scene_value.variables.eye_direction;
 
     let mut control_event_js = in_control_event.borrow_mut();
 
@@ -211,8 +211,8 @@ pub fn update_control(
     }
 
     // Update
-    scene_value.scene_variables.eye_location = eye;
-    scene_value.scene_variables.eye_direction = direction;
+    scene_value.variables.eye_location = eye;
+    scene_value.variables.eye_direction = direction;
 
     // Event context override
     control_event_js.on_click = false;
