@@ -1,13 +1,17 @@
+#![allow(dead_code)]
+
+// Definition of GPU vertex
 #[repr(C)]
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    pub pos: [f32; 4],
-    pub color: [f32; 3],
-    pub uv: [f32; 2],
-    pub normal: [f32; 3],
-    pub tangent: [f32; 3],
+    pub _pos: [f32; 4],
+    pub _color: [f32; 3],
+    pub _uv: [f32; 2],
+    pub _normal: [f32; 3],
+    pub _tangent: [f32; 3],
 }
 
+// Imported mesh
 #[derive(Clone, Default)]
 pub struct Mesh {
     pub _name: std::string::String,

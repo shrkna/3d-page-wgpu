@@ -1,3 +1,11 @@
+
+# $cargo build --target wasm32-unknown-unknown
+# other target is not working
+
+# after
+# $cargo install trunk
+# $trunk build
+
 [package]
 name 		= "wgpu-page"
 version 	= "0.1.0"

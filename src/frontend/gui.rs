@@ -1,7 +1,8 @@
 use crate::engine;
+use crate::types::Shared;
 use wasm_bindgen::JsCast;
 
-pub fn start_gui(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>) {
+pub fn start_gui(scene: &Shared<engine::scene::Scene>) {
     create_panels();
     create_view_dialog(scene);
 }
@@ -219,7 +220,7 @@ fn create_panels() {
     body.append_child(&panel_wrapper).unwrap();
 }
 
-fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>) {
+fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
     let body: web_sys::HtmlElement = gloo::utils::body();
 
     let view_wrapper: web_sys::Element = gloo::utils::document().create_element("div").unwrap();
@@ -304,20 +305,24 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                     sun_x_input_range.set_attribute("min", "-1.0").unwrap();
                     sun_x_input_range.set_attribute("max", "1.0").unwrap();
                     sun_x_input_range.set_attribute("step", "0.01").unwrap();
-                    sun_x_input_range
-                        .set_value(scene_value.directional_light_angle[0].to_string().as_str());
+                    sun_x_input_range.set_value(
+                        scene_value.scene_variables.directional_light_angle[0]
+                            .to_string()
+                            .as_str(),
+                    );
 
                     let sun_x_input_range_text: web_sys::Element =
                         gloo::utils::document().create_element("div").unwrap();
                     sun_x_input_range_text.set_id("sun-range-x-text");
                     sun_x_input_range_text.set_class_name("range-text-element");
                     sun_x_input_range_text.set_text_content(Some(
-                        scene_value.directional_light_angle[0].to_string().as_str(),
+                        scene_value.scene_variables.directional_light_angle[0]
+                            .to_string()
+                            .as_str(),
                     ));
 
                     {
-                        let scene_clone: std::rc::Rc<std::cell::RefCell<engine::scene::Scene>> =
-                            scene.clone();
+                        let scene_clone: Shared<engine::scene::Scene> = scene.clone();
 
                         let sun_range_x_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                             wasm_bindgen::closure::Closure::wrap(Box::new(
@@ -330,7 +335,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                                     let value: String = range_x_element.value();
 
                                     let mut scene_value = scene_clone.borrow_mut();
-                                    scene_value.directional_light_angle[0] =
+                                    scene_value.scene_variables.directional_light_angle[0] =
                                         value.parse::<f32>().unwrap();
 
                                     let range_x_text_element: web_sys::Element =
@@ -391,20 +396,24 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                     sun_y_input_range.set_attribute("min", "-1.0").unwrap();
                     sun_y_input_range.set_attribute("max", "1.0").unwrap();
                     sun_y_input_range.set_attribute("step", "0.01").unwrap();
-                    sun_y_input_range
-                        .set_value(scene_value.directional_light_angle[1].to_string().as_str());
+                    sun_y_input_range.set_value(
+                        scene_value.scene_variables.directional_light_angle[1]
+                            .to_string()
+                            .as_str(),
+                    );
 
                     let sun_y_input_range_text: web_sys::Element =
                         gloo::utils::document().create_element("div").unwrap();
                     sun_y_input_range_text.set_id("sun-range-y-text");
                     sun_y_input_range_text.set_class_name("range-text-element");
                     sun_y_input_range_text.set_text_content(Some(
-                        scene_value.directional_light_angle[1].to_string().as_str(),
+                        scene_value.scene_variables.directional_light_angle[1]
+                            .to_string()
+                            .as_str(),
                     ));
 
                     {
-                        let scene_clone: std::rc::Rc<std::cell::RefCell<engine::scene::Scene>> =
-                            scene.clone();
+                        let scene_clone: Shared<engine::scene::Scene> = scene.clone();
 
                         let sun_range_y_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                             wasm_bindgen::closure::Closure::wrap(Box::new(
@@ -417,7 +426,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                                     let value: String = range_y_element.value();
 
                                     let mut scene_value = scene_clone.borrow_mut();
-                                    scene_value.directional_light_angle[1] =
+                                    scene_value.scene_variables.directional_light_angle[1] =
                                         value.parse::<f32>().unwrap();
 
                                     let range_y_text_element: web_sys::Element =
@@ -477,20 +486,24 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                     sun_z_input_range.set_attribute("min", "-1.0").unwrap();
                     sun_z_input_range.set_attribute("max", "1.0").unwrap();
                     sun_z_input_range.set_attribute("step", "0.01").unwrap();
-                    sun_z_input_range
-                        .set_value(scene_value.directional_light_angle[2].to_string().as_str());
+                    sun_z_input_range.set_value(
+                        scene_value.scene_variables.directional_light_angle[2]
+                            .to_string()
+                            .as_str(),
+                    );
 
                     let sun_z_input_range_text: web_sys::Element =
                         gloo::utils::document().create_element("div").unwrap();
                     sun_z_input_range_text.set_id("sun-range-z-text");
                     sun_z_input_range_text.set_class_name("range-text-element");
                     sun_z_input_range_text.set_text_content(Some(
-                        scene_value.directional_light_angle[2].to_string().as_str(),
+                        scene_value.scene_variables.directional_light_angle[2]
+                            .to_string()
+                            .as_str(),
                     ));
 
                     {
-                        let scene_clone: std::rc::Rc<std::cell::RefCell<engine::scene::Scene>> =
-                            scene.clone();
+                        let scene_clone: Shared<engine::scene::Scene> = scene.clone();
 
                         let sun_range_z_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                             wasm_bindgen::closure::Closure::wrap(Box::new(
@@ -503,7 +516,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                                     let value: String = range_z_element.value();
 
                                     let mut scene_value = scene_clone.borrow_mut();
-                                    scene_value.directional_light_angle[2] =
+                                    scene_value.scene_variables.directional_light_angle[2] =
                                         value.parse::<f32>().unwrap();
 
                                     let range_z_text_element: web_sys::Element =
@@ -609,8 +622,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
             render_type_option_forward.set_text_content(Some("forward"));
 
             {
-                let scene_clone: std::rc::Rc<std::cell::RefCell<engine::scene::Scene>> =
-                    scene.clone();
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
 
                 let render_type_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                     wasm_bindgen::closure::Closure::wrap(Box::new(
@@ -625,11 +637,11 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                             let mut scene_value = scene_clone.borrow_mut();
                             match value.as_str() {
                                 "differed" => {
-                                    scene_value.scene_shading_type =
+                                    scene_value.scene_variables.scene_shading_type =
                                         engine::scene::ShadingType::Differed;
                                 }
                                 "forward" => {
-                                    scene_value.scene_shading_type =
+                                    scene_value.scene_variables.scene_shading_type =
                                         engine::scene::ShadingType::Forward
                                 }
                                 _ => {}
@@ -685,7 +697,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                 .set_attribute("type", "color")
                 .unwrap();
             {
-                let bg_color: [f32; 4] = scene_value.background_color;
+                let bg_color: [f32; 4] = scene_value.scene_variables.background_color;
                 let r_uint: u32 = (bg_color[0] * 255.0) as u32;
                 let r_hex: String = format!("{r_uint:X}");
                 let g_uint: u32 = (bg_color[1] * 255.0) as u32;
@@ -700,8 +712,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
             }
 
             {
-                let scene_clone: std::rc::Rc<std::cell::RefCell<engine::scene::Scene>> =
-                    scene.clone();
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
 
                 let bgcolor_picker_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                     wasm_bindgen::closure::Closure::wrap(Box::new(
@@ -718,7 +729,7 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                                 u32::from_str_radix(&color_hex, 16).unwrap().to_be_bytes();
 
                             let mut scene_value = scene_clone.borrow_mut();
-                            scene_value.background_color = [
+                            scene_value.scene_variables.background_color = [
                                 color_u8[1] as f32 / 256 as f32,
                                 color_u8[2] as f32 / 256 as f32,
                                 color_u8[3] as f32 / 256 as f32,
@@ -778,12 +789,11 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
                 gloo::utils::document().create_element("option").unwrap();
             buffer_type_option_albedo.set_text_content(Some("albedo"));
             let buffer_type_option_metallic =
-            gloo::utils::document().create_element("option").unwrap();
+                gloo::utils::document().create_element("option").unwrap();
             buffer_type_option_metallic.set_text_content(Some("metallic"));
 
             {
-                let scene_clone: std::rc::Rc<std::cell::RefCell<engine::scene::Scene>> =
-                    scene.clone();
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
 
                 let buffer_type_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                     wasm_bindgen::closure::Closure::wrap(Box::new(
@@ -797,12 +807,12 @@ fn create_view_dialog(scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scen
 
                             let mut scene_value = scene_clone.borrow_mut();
                             match value.as_str() {
-                                "render" => scene_value.differed_debug_type = 0,
-                                "normal" => scene_value.differed_debug_type = 1,
-                                "depth" => scene_value.differed_debug_type = 2,
-                                "albedo" => scene_value.differed_debug_type = 3,
-                                "metallic" => scene_value.differed_debug_type = 4,
-                                _ => scene_value.differed_debug_type = 0,
+                                "render" => scene_value.scene_variables.differed_debug_type = 0,
+                                "normal" => scene_value.scene_variables.differed_debug_type = 1,
+                                "depth" => scene_value.scene_variables.differed_debug_type = 2,
+                                "albedo" => scene_value.scene_variables.differed_debug_type = 3,
+                                "metallic" => scene_value.scene_variables.differed_debug_type = 4,
+                                _ => scene_value.scene_variables.differed_debug_type = 0,
                             }
                         },
                     )

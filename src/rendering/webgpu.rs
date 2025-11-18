@@ -1,6 +1,6 @@
 use crate::engine::{self, define};
 use crate::rendering::common;
-
+use crate::types::Shared;
 use wasm_bindgen::JsCast;
 use wgpu::util::DeviceExt;
 use wgpu::TextureViewDescriptor;
@@ -8,6 +8,8 @@ use wgpu::TextureViewDescriptor;
 const WEBGPU_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 const WEBGPU_FRONT_FACE: wgpu::FrontFace = wgpu::FrontFace::Ccw;
 const WEBGPU_CULL_MODE: wgpu::Face = wgpu::Face::Back;
+
+// --------------------------------------------------------------------------------------------
 
 pub struct WebGPUInterface<'a> {
     pub surface: wgpu::Surface<'a>,
@@ -17,7 +19,32 @@ pub struct WebGPUInterface<'a> {
     pub depth_texture: wgpu::Texture,
 }
 
-pub struct WebGPURenderResource {
+pub struct WebGPUShaderResource {
+    pub _shader_name: std::string::String,
+    pub render_pipeline: wgpu::RenderPipeline,
+    pub bind_group_layout: wgpu::BindGroupLayout,
+    pub _bind_group_layout_2: Option<wgpu::BindGroupLayout>,
+    pub uniform_size: u64,
+}
+
+pub struct WebGPURenderingResource {
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: wgpu::Buffer,
+    pub index_count: u32,
+    pub uniform_buffer: Option<wgpu::Buffer>,
+    pub bind_group: Option<wgpu::BindGroup>,
+    pub bind_group_2: Option<wgpu::BindGroup>,
+    pub _base_color_texture: Option<wgpu::Texture>,
+    pub base_color_texture_view: Option<wgpu::TextureView>,
+    pub base_color_texture_sampler: Option<wgpu::Sampler>,
+    pub _normal_texture: Option<wgpu::Texture>,
+    pub normal_texture_view: Option<wgpu::TextureView>,
+    pub normal_texture_sampler: Option<wgpu::Sampler>,
+}
+
+// Deprecated ---------------------------------------------------------------------------------
+
+pub struct WebGPURenderingResourceDeprecated {
     pub _shader: wgpu::ShaderModule,
     pub vertex_buf: wgpu::Buffer,
     pub index_buf: wgpu::Buffer,
@@ -41,7 +68,7 @@ pub struct WebGPUDifferedResource {
     pub debug_pipeline: wgpu::RenderPipeline,
 }
 
-// Initialize Webgpu contexts --------------------------------------------------------------------------------
+// Webgpu contexts -----------------------------------------------------------------------------
 
 pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     let canvas: web_sys::Element = gloo::utils::document()
@@ -57,7 +84,8 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     // Initialize webgpu
 
     let instance: wgpu::Instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
-    let surface_target: wgpu::SurfaceTarget<'_> = wgpu::SurfaceTarget::Canvas(canvas);
+    let surface_target = wgpu::SurfaceTarget::Canvas(canvas);
+
     let surface: wgpu::Surface = instance
         .create_surface(surface_target)
         .expect("Failed to create surface from canvas");
@@ -117,7 +145,7 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
 
     // Return webgpu resource
 
-    let resource: WebGPUInterface<'_> = WebGPUInterface {
+    let interface: WebGPUInterface<'_> = WebGPUInterface {
         surface,
         device,
         queue,
@@ -125,132 +153,542 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
         depth_texture,
     };
 
-    return resource;
+    return interface;
 }
 
-#[allow(dead_code)]
-pub fn init_forward_pipeline(
-    interface: &WebGPUInterface,
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
-) {
-    for object in scene.borrow_mut().objects.iter_mut() {
-        if object.shading_type != 1 && object.source_mesh.is_some() {
-            object.shading_type = 1;
-            object.render_resource = Some(std::rc::Rc::new(std::cell::RefCell::new(
-                init_phong_shading(&interface, &object.source_mesh.as_ref().unwrap().borrow()),
-            )));
-        }
+pub fn create_shader_resource(interface: &WebGPUInterface) -> WebGPUShaderResource {
+    struct PhongUniform {
+        _transform_matrix: [f32; 16],
+        _rotation_matrix: [f32; 16],
+        _directional_light: [f32; 4],
+        _ambient_light: [f32; 4],
+        _inverse_matrix: [f32; 16],
+        _buffer_type: [f32; 4],
     }
+
+    let shader: wgpu::ShaderModule =
+        interface
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                    "../shader/phong.wgsl"
+                ))),
+            });
+
+    let vertex_size: usize = std::mem::size_of::<common::Vertex>();
+    let vertex_buffer_layout: [wgpu::VertexBufferLayout<'_>; 1] = [wgpu::VertexBufferLayout {
+        array_stride: vertex_size as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &[
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 0,
+                shader_location: 0,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: std::mem::size_of::<[f32; 9]>() as u64,
+                shader_location: 1,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: std::mem::size_of::<[f32; 7]>() as u64,
+                shader_location: 2,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: std::mem::size_of::<[f32; 12]>() as u64,
+                shader_location: 3,
+            },
+        ],
+    }];
+
+    let uniform_size: u64 = std::mem::size_of::<PhongUniform>() as u64;
+    let bind_group_layout: wgpu::BindGroupLayout =
+        interface
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(uniform_size),
+                    },
+                    count: None,
+                }],
+            });
+
+    let bind_group_layout_2 =
+        interface
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("bind_group_layout_2"),
+            });
+
+    let pipeline_layout: wgpu::PipelineLayout =
+        interface
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&bind_group_layout, &bind_group_layout_2],
+                push_constant_ranges: &[],
+            });
+
+    let render_pipeline: wgpu::RenderPipeline =
+        interface
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(define::VS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    buffers: &vertex_buffer_layout,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(define::FS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    targets: &[Some(interface.swapchain_format.into())],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    front_face: WEBGPU_FRONT_FACE,
+                    cull_mode: Some(WEBGPU_CULL_MODE),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: WEBGPU_DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
+
+    return WebGPUShaderResource {
+        _shader_name: "Phong".to_string(),
+        bind_group_layout: bind_group_layout,
+        _bind_group_layout_2: Some(bind_group_layout_2),
+        render_pipeline: render_pipeline,
+        uniform_size: uniform_size,
+    };
 }
 
-pub fn init_differed_gbuffer_pipeline(
+pub fn create_rendering_resource(
     interface: &WebGPUInterface,
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
+    mesh: &common::Mesh,
+    materials: &Vec<engine::scene::SceneMaterial>,
+) -> WebGPURenderingResource {
+    let vertex_data: &Vec<common::Vertex> = &mesh.vertices;
+    let index_data: &Vec<u32> = &mesh.indices;
+
+    let vertex_buf: wgpu::Buffer =
+        interface
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertex_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+    let index_buf: wgpu::Buffer =
+        interface
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&index_data),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+    let index_count: u32 = index_data.len() as u32;
+
+    let base_color_texture_raw = &materials
+        .get(mesh.material.unwrap() as usize)
+        .unwrap()
+        .base_color_texture;
+    let base_color_texture_size = &materials
+        .get(mesh.material.unwrap() as usize)
+        .unwrap()
+        .base_color_texture_size;
+    let base_color_texture: wgpu::Texture =
+        interface.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("base color texture"),
+            size: wgpu::Extent3d {
+                width: base_color_texture_size[0],
+                height: base_color_texture_size[1],
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+    interface.queue.write_texture(
+        wgpu::ImageCopyTexture {
+            aspect: wgpu::TextureAspect::All,
+            texture: &base_color_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        },
+        &base_color_texture_raw,
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * base_color_texture_size[0]),
+            rows_per_image: Some(base_color_texture_size[1]),
+        },
+        wgpu::Extent3d {
+            width: base_color_texture_size[0],
+            height: base_color_texture_size[1],
+            depth_or_array_layers: 1,
+        },
+    );
+
+    let base_color_texture_view: wgpu::TextureView =
+        base_color_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let base_color_texture_sampler: wgpu::Sampler =
+        interface.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+    let normal_texture_raw = &materials
+        .get(mesh.material.unwrap() as usize)
+        .unwrap()
+        .normal_texture;
+    let normal_texture_size = &materials
+        .get(mesh.material.unwrap() as usize)
+        .unwrap()
+        .normal_texture_size;
+    let normal_texture: wgpu::Texture = interface.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("normal texture"),
+        size: wgpu::Extent3d {
+            width: normal_texture_size[0],
+            height: normal_texture_size[1],
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    interface.queue.write_texture(
+        wgpu::ImageCopyTexture {
+            aspect: wgpu::TextureAspect::All,
+            texture: &normal_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+        },
+        &normal_texture_raw,
+        wgpu::ImageDataLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * normal_texture_size[0]),
+            rows_per_image: Some(normal_texture_size[1]),
+        },
+        wgpu::Extent3d {
+            width: normal_texture_size[0],
+            height: normal_texture_size[1],
+            depth_or_array_layers: 1,
+        },
+    );
+
+    let normal_texture_view: wgpu::TextureView =
+        normal_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let normal_texture_sampler: wgpu::Sampler =
+        interface.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
+    return WebGPURenderingResource {
+        vertex_buffer: vertex_buf,
+        index_buffer: index_buf,
+        index_count: index_count,
+        uniform_buffer: None,
+        bind_group: None,
+        bind_group_2: None,
+        _base_color_texture: Some(base_color_texture),
+        base_color_texture_view: Some(base_color_texture_view),
+        base_color_texture_sampler: Some(base_color_texture_sampler),
+        _normal_texture: Some(normal_texture),
+        normal_texture_view: Some(normal_texture_view),
+        normal_texture_sampler: Some(normal_texture_sampler),
+    };
+}
+
+// Forward rendering ---------------------------------------------------------------------------
+
+pub fn update_phong_shading(
+    interface: &WebGPUInterface,
+    shader_resource: &WebGPUShaderResource,
+    scene: &Shared<engine::scene::Scene>,
+    object: &engine::scene::SceneObject,
 ) {
-    struct InitMap {
-        index: usize,
-        resource: WebGPURenderResource,
+    if object.rendering_resource.is_none() {
+        log::debug!("[Update] Rendering resource is empty");
+        return;
     }
 
-    // Correct object need initialize pipeline
-    let mut init_list: Vec<InitMap> = Vec::new();
+    if object
+        .rendering_resource
+        .as_ref()
+        .unwrap()
+        .borrow()
+        .uniform_buffer
+        .is_none()
     {
-        let scene_borrow = scene.borrow();
-        let scene_mterials = &scene_borrow.materials;
-        if scene_borrow.use_batched == false {
-            for i in 0..scene_borrow.objects.len() {
-                let object_borrow = scene_borrow.objects.get(i).unwrap();
-                if object_borrow.shading_type != 0 && object_borrow.source_mesh.is_some() {
-                    init_list.push(InitMap {
-                        index: i,
-                        resource: init_differed_gbuffers_shading(
-                            &interface,
-                            &object_borrow.source_mesh.as_ref().unwrap().borrow(),
-                            &scene_mterials,
+        let uniform_buf: wgpu::Buffer = interface.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Uniform Buffer"),
+            size: shader_resource.uniform_size,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        object
+            .rendering_resource
+            .as_ref()
+            .unwrap()
+            .borrow_mut()
+            .uniform_buffer = Some(uniform_buf);
+    }
+
+    if object
+        .rendering_resource
+        .as_ref()
+        .unwrap()
+        .borrow()
+        .bind_group
+        .is_none()
+    {
+        let bind_group: wgpu::BindGroup =
+            interface
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &shader_resource.bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: object
+                            .rendering_resource
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .uniform_buffer
+                            .as_ref()
+                            .unwrap()
+                            .as_entire_binding(),
+                    }],
+                    label: Some("Bind group 0"),
+                });
+        object
+            .rendering_resource
+            .as_ref()
+            .unwrap()
+            .borrow_mut()
+            .bind_group = Some(bind_group);
+    }
+
+    if object
+        .rendering_resource
+        .as_ref()
+        .unwrap()
+        .borrow()
+        .bind_group_2
+        .is_none()
+    {
+        let bind_group_2 = interface
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                layout: &shader_resource
+                    ._bind_group_layout_2
+                    .as_ref()
+                    .expect("[Update] Bind group layout 2"),
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(
+                            &object
+                                .rendering_resource
+                                .as_ref()
+                                .unwrap()
+                                .borrow()
+                                .base_color_texture_view
+                                .as_ref()
+                                .unwrap(),
                         ),
-                    });
-                }
-            }
-        } else {
-            for i in 0..scene_borrow.batched_objects.len() {
-                let batched = scene_borrow.batched_objects.get(i).unwrap();
-                if batched.shading_type != 0 && batched.source_mesh.is_some() {
-                    init_list.push(InitMap {
-                        index: i,
-                        resource: init_differed_gbuffers_shading(
-                            &interface,
-                            &batched.source_mesh.as_ref().unwrap().borrow(),
-                            &scene_mterials,
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(
+                            &object
+                                .rendering_resource
+                                .as_ref()
+                                .unwrap()
+                                .borrow()
+                                .base_color_texture_sampler
+                                .as_ref()
+                                .unwrap(),
                         ),
-                    });
-                }
-            }
-        }
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(
+                            &object
+                                .rendering_resource
+                                .as_ref()
+                                .unwrap()
+                                .borrow()
+                                .normal_texture_view
+                                .as_ref()
+                                .unwrap(),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(
+                            &object
+                                .rendering_resource
+                                .as_ref()
+                                .unwrap()
+                                .borrow()
+                                .normal_texture_sampler
+                                .as_ref()
+                                .unwrap(),
+                        ),
+                    },
+                ],
+                label: Some("texture_bind_group"),
+            });
+
+        object
+            .rendering_resource
+            .as_ref()
+            .unwrap()
+            .borrow_mut()
+            .bind_group_2 = Some(bind_group_2);
     }
 
-    // Initialize pipeline
-    for init_elem in init_list {
-        let mut scene_borrow = scene.borrow_mut();
-        if scene_borrow.use_batched == false {
-            let object_borrow = scene_borrow.objects.get_mut(init_elem.index).unwrap();
-            object_borrow.shading_type = 0;
-            object_borrow.render_resource = Some(std::rc::Rc::new(std::cell::RefCell::new(
-                init_elem.resource,
-            )));
-        } else {
-            let batched = scene_borrow
-                .batched_objects
-                .get_mut(init_elem.index)
-                .unwrap();
-            batched.shading_type = 0;
-            batched.render_resource = Some(std::rc::Rc::new(std::cell::RefCell::new(
-                init_elem.resource,
-            )));
-        }
+    let canvas: web_sys::Element = gloo::utils::document()
+        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .unwrap();
+    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
+    let width: u32 = canvas.client_width() as u32;
+    let height: u32 = canvas.client_height() as u32;
+    let aspect_ratio: f32 = width as f32 / height as f32;
+
+    let scene_value = scene.borrow();
+
+    let eye: glam::Vec3 = scene_value.scene_variables.eye_location;
+    let direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
+
+    let mut model_matrix = glam::Mat4::from_cols_array_2d(&object.world_transform);
+
+    // Force Y-up to Z-up
+    if scene_value.scene_variables.convert_y_to_z {
+        let y_to_z_mat: glam::Mat4 =
+            glam::Mat4::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
+        model_matrix = y_to_z_mat * model_matrix;
     }
+
+    let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
+    let projection_matrix: glam::Mat4 =
+        glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
+    let transform_matrix: glam::Mat4 = projection_matrix * view_matrix * model_matrix;
+
+    let directional: [f32; 3] = scene_value.scene_variables.directional_light_angle;
+    let ambient: [f32; 4] = scene_value.scene_variables.ambient_light_color;
+    let inverse_projection: glam::Mat4 = transform_matrix.inverse();
+
+    let rotaton_matrix: glam::Mat4 =
+        glam::Mat4::from_quat(model_matrix.to_scale_rotation_translation().1);
+
+    let mut uniform_total: Vec<f32> = transform_matrix.to_cols_array().to_vec();
+    uniform_total.extend_from_slice(&rotaton_matrix.to_cols_array().to_vec());
+    uniform_total.extend_from_slice(&directional);
+    uniform_total.extend_from_slice(&[0.0]); // Padding!
+    uniform_total.extend_from_slice(&ambient);
+    uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
+    uniform_total.extend_from_slice(&[
+        scene_value.scene_variables.differed_debug_type as f32,
+        0.0,
+        0.0,
+        0.0,
+    ]);
+
+    let uniform_ref: &[f32] = uniform_total.as_ref();
+    interface.queue.write_buffer(
+        &object
+            .rendering_resource
+            .as_ref()
+            .unwrap()
+            .borrow()
+            .uniform_buffer
+            .as_ref()
+            .unwrap(),
+        0,
+        bytemuck::cast_slice(uniform_ref),
+    );
 }
-
-// Update functions --------------------------------------------------------------------------------
-
-pub fn update_forward_shading(
-    interface: &WebGPUInterface,
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
-) {
-    for scene_object in scene.borrow().objects.iter() {
-        if scene_object.shading_type == 1 {
-            update_phong_shading(&scene.clone(), &interface, &scene_object);
-        }
-    }
-}
-
-pub fn update_differed_shading(
-    interface: &WebGPUInterface,
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
-    differed_resource: &WebGPUDifferedResource,
-) {
-    // Update gbuffer
-    if scene.borrow().use_batched == false {
-        for scene_object in &scene.as_ref().borrow().objects {
-            if scene_object.shading_type == 0 {
-                update_differed_gbuffers_shading(&scene, &interface, &scene_object);
-            }
-        }
-    } else {
-        for batched in &scene.as_ref().borrow().batched_objects {
-            if batched.shading_type == 0 {
-                update_differed_gbuffers_shading(&scene, &interface, &batched);
-            }
-        }
-    }
-    // Update differed
-    update_differed_buffer(&scene, &interface, &differed_resource);
-}
-
-// Render functions --------------------------------------------------------------------------------
 
 pub fn render_forward_shading_main(
     interface: &WebGPUInterface,
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
+    shader_resource: &WebGPUShaderResource,
+    scene: &Shared<engine::scene::Scene>,
 ) {
     let frame: wgpu::SurfaceTexture = interface
         .surface
@@ -293,10 +731,10 @@ pub fn render_forward_shading_main(
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: scene_value.background_color[0] as f64,
-                            g: scene_value.background_color[1] as f64,
-                            b: scene_value.background_color[2] as f64,
-                            a: scene_value.background_color[3] as f64,
+                            r: scene_value.scene_variables.background_color[0] as f64,
+                            g: scene_value.scene_variables.background_color[1] as f64,
+                            b: scene_value.scene_variables.background_color[2] as f64,
+                            a: scene_value.scene_variables.background_color[3] as f64,
                         }),
                         store: wgpu::StoreOp::Store,
                     },
@@ -314,755 +752,130 @@ pub fn render_forward_shading_main(
             });
 
         for object in scene.borrow().objects.iter() {
-            if object.shading_type == 1 {
-                rpass.set_pipeline(
-                    &object
-                        .render_resource
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .render_pipeline,
-                );
-                rpass.set_bind_group(
-                    0,
-                    &object.render_resource.as_ref().unwrap().borrow().bind_group,
-                    &[],
-                );
-                rpass.set_index_buffer(
-                    object
-                        .render_resource
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .index_buf
-                        .slice(..),
-                    wgpu::IndexFormat::Uint32,
-                );
-                rpass.set_vertex_buffer(
-                    0,
-                    object
-                        .render_resource
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .vertex_buf
-                        .slice(..),
-                );
-                rpass.draw_indexed(
-                    0..object
-                        .render_resource
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .index_count,
-                    0,
-                    0..1,
-                );
+            if object.rendering_resource.is_none() {
+                continue;
             }
+
+            rpass.set_pipeline(&shader_resource.render_pipeline);
+            rpass.set_bind_group(
+                0,
+                &object
+                    .rendering_resource
+                    .as_ref()
+                    .expect("[draw] Rendering resource is empty")
+                    .borrow()
+                    .bind_group,
+                &[],
+            );
+            rpass.set_bind_group(
+                1,
+                &object
+                    .rendering_resource
+                    .as_ref()
+                    .unwrap()
+                    .borrow()
+                    .bind_group_2,
+                &[],
+            );
+            rpass.set_index_buffer(
+                object
+                    .rendering_resource
+                    .as_ref()
+                    .unwrap()
+                    .borrow()
+                    .index_buffer
+                    .slice(..),
+                wgpu::IndexFormat::Uint32,
+            );
+            rpass.set_vertex_buffer(
+                0,
+                object
+                    .rendering_resource
+                    .as_ref()
+                    .unwrap()
+                    .borrow()
+                    .vertex_buffer
+                    .slice(..),
+            );
+            rpass.draw_indexed(
+                0..object
+                    .rendering_resource
+                    .as_ref()
+                    .unwrap()
+                    .borrow()
+                    .index_count,
+                0,
+                0..1,
+            );
         }
     }
 
     interface.queue.submit(Some(encoder.finish()));
     frame.present();
-}
-
-pub fn render_differed_shading_main(
-    interface: &WebGPUInterface,
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
-    differed_resource: &WebGPUDifferedResource,
-) {
-    let frame: wgpu::SurfaceTexture = interface
-        .surface
-        .get_current_texture()
-        .expect("Failed to acquire next swap chain texture");
-
-    let view: wgpu::TextureView = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-
-    let mut encoder: wgpu::CommandEncoder =
-        interface
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Differed render encoder"),
-            });
-
-    // gbuffer pass
-    {
-        let mut gbuffer_pass: wgpu::RenderPass<'_> =
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Differed gbuffer pass"),
-                color_attachments: &[
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &differed_resource
-                            .gbuffer_position_texture
-                            .create_view(&TextureViewDescriptor::default()),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &differed_resource
-                            .gbuffer_normal_texture
-                            .create_view(&TextureViewDescriptor::default()),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 1.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &differed_resource
-                            .gbuffer_albedo_texture
-                            .create_view(&TextureViewDescriptor::default()),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                    Some(wgpu::RenderPassColorAttachment {
-                        view: &differed_resource
-                            .gbuffer_metallic_roughness_texture
-                            .create_view(&TextureViewDescriptor::default()),
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &interface
-                        .depth_texture
-                        .create_view(&wgpu::TextureViewDescriptor::default()),
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-        if scene.borrow().use_batched == false {
-            for object in scene.borrow().objects.iter() {
-                if object.shading_type == 0 {
-                    gbuffer_pass.set_pipeline(
-                        &object
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .render_pipeline,
-                    );
-                    gbuffer_pass.set_bind_group(
-                        0,
-                        &object.render_resource.as_ref().unwrap().borrow().bind_group,
-                        &[],
-                    );
-                    if object
-                        .render_resource
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .bind_group_2
-                        .is_some()
-                    {
-                        gbuffer_pass.set_bind_group(
-                            1,
-                            &object
-                                .render_resource
-                                .as_ref()
-                                .unwrap()
-                                .borrow()
-                                .bind_group_2,
-                            &[],
-                        );
-                    }
-                    gbuffer_pass.set_index_buffer(
-                        object
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .index_buf
-                            .slice(..),
-                        wgpu::IndexFormat::Uint32,
-                    );
-                    gbuffer_pass.set_vertex_buffer(
-                        0,
-                        object
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .vertex_buf
-                            .slice(..),
-                    );
-                    gbuffer_pass.draw_indexed(
-                        0..object
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .index_count,
-                        0,
-                        0..1,
-                    );
-                }
-            }
-        } else {
-            for batched in scene.borrow().batched_objects.iter() {
-                if batched.shading_type == 0 {
-                    gbuffer_pass.set_pipeline(
-                        &batched
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .render_pipeline,
-                    );
-                    gbuffer_pass.set_bind_group(
-                        0,
-                        &batched
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .bind_group,
-                        &[],
-                    );
-                    if batched
-                        .render_resource
-                        .as_ref()
-                        .unwrap()
-                        .borrow()
-                        .bind_group_2
-                        .is_some()
-                    {
-                        gbuffer_pass.set_bind_group(
-                            1,
-                            &batched
-                                .render_resource
-                                .as_ref()
-                                .unwrap()
-                                .borrow()
-                                .bind_group_2,
-                            &[],
-                        );
-                    }
-                    gbuffer_pass.set_index_buffer(
-                        batched
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .index_buf
-                            .slice(..),
-                        wgpu::IndexFormat::Uint32,
-                    );
-                    gbuffer_pass.set_vertex_buffer(
-                        0,
-                        batched
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .vertex_buf
-                            .slice(..),
-                    );
-                    gbuffer_pass.draw_indexed(
-                        0..batched
-                            .render_resource
-                            .as_ref()
-                            .unwrap()
-                            .borrow()
-                            .index_count,
-                        0,
-                        0..1,
-                    );
-                }
-            }
-        }
-    }
-
-    // differed pass
-    {
-        let scene_value = scene.borrow();
-
-        let mut differed_pass: wgpu::RenderPass<'_> =
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Differed render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: scene_value.background_color[0] as f64,
-                            g: scene_value.background_color[1] as f64,
-                            b: scene_value.background_color[2] as f64,
-                            a: scene_value.background_color[3] as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-
-        if scene_value.differed_debug_type == 0 {
-            differed_pass.set_pipeline(&differed_resource.render_pipeline);
-        } else {
-            differed_pass.set_pipeline(&differed_resource.debug_pipeline);
-        }
-
-        differed_pass.set_bind_group(0, &differed_resource.bind_groups[0], &[]);
-        differed_pass.set_bind_group(1, &differed_resource.bind_groups[1], &[]);
-        differed_pass.draw(0..6, 0..1);
-    }
-
-    interface.queue.submit(Some(encoder.finish()));
-    frame.present();
-}
-
-// Forward shading --------------------------------------------------------------------
-
-#[allow(dead_code)]
-fn init_color_shading(interface: &WebGPUInterface, mesh: &common::Mesh) -> WebGPURenderResource {
-    let shader: wgpu::ShaderModule =
-        interface
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                    "../shader/color.wgsl"
-                ))),
-            });
-
-    let vertex_size: usize = std::mem::size_of::<common::Vertex>();
-    let vertex_data: &Vec<common::Vertex> = &mesh.vertices;
-    let index_data: &Vec<u32> = &mesh.indices;
-
-    let vertex_buf: wgpu::Buffer =
-        interface
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertex_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-    let index_buf: wgpu::Buffer =
-        interface
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&index_data),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-    // bindings
-
-    let uniform_size: u64 = 4 * (16);
-    let uniform_buf: wgpu::Buffer = interface.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Uniform Buffer"),
-        size: uniform_size,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let bind_group_layout: wgpu::BindGroupLayout =
-        interface
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(64),
-                    },
-                    count: None,
-                }],
-            });
-
-    let bind_group: wgpu::BindGroup =
-        interface
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buf.as_entire_binding(),
-                }],
-                label: Some("Bind group 0"),
-            });
-
-    // pipeline
-
-    let pipeline_layout: wgpu::PipelineLayout =
-        interface
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-    let vertex_buffers: [wgpu::VertexBufferLayout<'_>; 1] = [wgpu::VertexBufferLayout {
-        array_stride: vertex_size as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
-                offset: 0,
-                shader_location: 0,
-            },
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: (std::mem::size_of::<[f32; 4]>()) as wgpu::BufferAddress,
-                shader_location: 1,
-            },
-        ],
-    }];
-
-    let render_pipeline: wgpu::RenderPipeline =
-        interface
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
-                    compilation_options: Default::default(),
-                    buffers: &vertex_buffers,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(define::FS_ENTRY_POINT),
-                    compilation_options: Default::default(),
-                    targets: &[Some(interface.swapchain_format.into())],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(WEBGPU_CULL_MODE),
-                    ..Default::default()
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: wgpu::TextureFormat::Depth24Plus,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
-                cache: None,
-            });
-
-    let index_count: u32 = index_data.len() as u32;
-
-    let render_resource: WebGPURenderResource = WebGPURenderResource {
-        _shader: shader,
-        vertex_buf,
-        index_buf,
-        index_count,
-        bind_group,
-        _bind_group_layout: bind_group_layout,
-        bind_group_2: None,
-        uniform_buf,
-        render_pipeline,
-    };
-
-    return render_resource;
-}
-
-#[allow(dead_code)]
-fn update_color_shading(
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
-    interface: &WebGPUInterface,
-    resource: &WebGPURenderResource,
-) {
-    let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
-        .unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
-    let width: u32 = canvas.client_width() as u32;
-    let height: u32 = canvas.client_height() as u32;
-    let aspect_ratio: f32 = width as f32 / height as f32;
-
-    let scene_value = scene.borrow();
-
-    let eye: glam::Vec3 = scene_value.eye_location;
-    let direction: glam::Vec3 = scene_value.eye_direction;
-
-    // Create matrices and write buffer
-    let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
-    let projection_matrix: glam::Mat4 =
-        glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
-    let mx_total: glam::Mat4 = projection_matrix * view_matrix;
-    let mx_ref: &[f32; 16] = mx_total.as_ref();
-    interface
-        .queue
-        .write_buffer(&resource.uniform_buf, 0, bytemuck::cast_slice(mx_ref));
-}
-
-#[allow(dead_code)]
-fn init_phong_shading(interface: &WebGPUInterface, mesh: &common::Mesh) -> WebGPURenderResource {
-    struct PhongUniform {
-        transform_matrix: [f32; 16],
-        rotation_matrix: [f32; 16],
-        directional_light: [f32; 4],
-        ambient_light: [f32; 4],
-        inverse_matrix: [f32; 16],
-        buffer_type: [f32; 4],
-    }
-
-    let shader: wgpu::ShaderModule =
-        interface
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                    "../shader/phong.wgsl"
-                ))),
-            });
-
-    let vertex_size: usize = std::mem::size_of::<common::Vertex>();
-    let vertex_data: &Vec<common::Vertex> = &mesh.vertices;
-    let index_data: &Vec<u32> = &mesh.indices;
-
-    let vertex_buf: wgpu::Buffer =
-        interface
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertex_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
-    let index_buf: wgpu::Buffer =
-        interface
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&index_data),
-                usage: wgpu::BufferUsages::INDEX,
-            });
-
-    let uniform_size: u64 = std::mem::size_of::<PhongUniform>() as u64;
-    let uniform_buf: wgpu::Buffer = interface.device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("Uniform Buffer"),
-        size: uniform_size,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let bind_group_layout: wgpu::BindGroupLayout =
-        interface
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(uniform_size),
-                    },
-                    count: None,
-                }],
-            });
-
-    let bind_group: wgpu::BindGroup =
-        interface
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                layout: &bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buf.as_entire_binding(),
-                }],
-                label: Some("Bind group 0"),
-            });
-
-    // pipeline
-
-    let pipeline_layout: wgpu::PipelineLayout =
-        interface
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[&bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-    let vertex_buffers: [wgpu::VertexBufferLayout<'_>; 1] = [wgpu::VertexBufferLayout {
-        array_stride: vertex_size as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
-                offset: 0,
-                shader_location: 0,
-            },
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: std::mem::size_of::<[f32; 9]>() as u64,
-                shader_location: 1,
-            },
-        ],
-    }];
-
-    let render_pipeline: wgpu::RenderPipeline =
-        interface
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
-                    compilation_options: Default::default(),
-                    buffers: &vertex_buffers,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(define::FS_ENTRY_POINT),
-                    compilation_options: Default::default(),
-                    targets: &[Some(interface.swapchain_format.into())],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    front_face: WEBGPU_FRONT_FACE,
-                    cull_mode: Some(WEBGPU_CULL_MODE),
-                    ..Default::default()
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: WEBGPU_DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
-                cache: None,
-            });
-
-    let index_count: u32 = index_data.len() as u32;
-
-    let render_resource: WebGPURenderResource = WebGPURenderResource {
-        _shader: shader,
-        vertex_buf,
-        index_buf,
-        index_count,
-        bind_group,
-        _bind_group_layout: bind_group_layout,
-        bind_group_2: None,
-        uniform_buf,
-        render_pipeline,
-    };
-
-    return render_resource;
-}
-
-#[allow(dead_code)]
-fn update_phong_shading(
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
-    interface: &WebGPUInterface,
-    object: &engine::scene::SceneObject,
-) {
-    let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
-        .unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
-    let width: u32 = canvas.client_width() as u32;
-    let height: u32 = canvas.client_height() as u32;
-    let aspect_ratio: f32 = width as f32 / height as f32;
-
-    let scene_value = scene.borrow();
-
-    let eye: glam::Vec3 = scene_value.eye_location;
-    let direction: glam::Vec3 = scene_value.eye_direction;
-
-    let mut model_matrix = glam::Mat4::from_cols_array_2d(&object.world_transform);
-
-    // Force Y-up to Z-up
-    if scene_value.convert_y_to_z {
-        let y_to_z_mat: glam::Mat4 =
-            glam::Mat4::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
-        model_matrix = y_to_z_mat * model_matrix;
-    }
-
-    let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
-    let projection_matrix: glam::Mat4 =
-        glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
-    let transform_matrix: glam::Mat4 = projection_matrix * view_matrix * model_matrix;
-
-    let directional: [f32; 3] = scene_value.directional_light_angle;
-    let ambient: [f32; 4] = scene_value.ambient_light_color;
-    let inverse_projection: glam::Mat4 = transform_matrix.inverse();
-
-    let rotaton_matrix: glam::Mat4 =
-        glam::Mat4::from_quat(model_matrix.to_scale_rotation_translation().1);
-
-    let mut uniform_total: Vec<f32> = transform_matrix.to_cols_array().to_vec();
-    uniform_total.extend_from_slice(&rotaton_matrix.to_cols_array().to_vec());
-    uniform_total.extend_from_slice(&directional);
-    uniform_total.extend_from_slice(&[0.0]); // Padding!
-    uniform_total.extend_from_slice(&ambient);
-    uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
-    uniform_total.extend_from_slice(&[scene_value.differed_debug_type as f32, 0.0, 0.0, 0.0]);
-
-    let uniform_ref: &[f32] = uniform_total.as_ref();
-    interface.queue.write_buffer(
-        &object
-            .render_resource
-            .as_ref()
-            .unwrap()
-            .borrow()
-            .uniform_buf,
-        0,
-        bytemuck::cast_slice(uniform_ref),
-    );
 }
 
 // Differed shading -----------------------------------------------------------------------------
+
+pub fn init_differed_gbuffer_pipeline(
+    interface: &WebGPUInterface,
+    scene: &Shared<engine::scene::Scene>,
+) {
+    struct InitMap {
+        index: usize,
+        resource: WebGPURenderingResourceDeprecated,
+    }
+    // Create render resources
+    let mut init_list: Vec<InitMap> = Vec::new();
+    {
+        let scene_borrow = scene.borrow();
+        let scene_mterials = &scene_borrow.materials;
+
+        let render_objects: Vec<engine::scene::SceneObject> =
+            if scene_borrow.scene_variables.use_batched {
+                scene_borrow.batched_objects.clone()
+            } else {
+                scene_borrow.objects.clone()
+            };
+
+        for i in 0..render_objects.len() {
+            let object_borrow = render_objects.get(i).unwrap();
+            if object_borrow.shading_type != 0 && object_borrow.source_mesh.is_some() {
+                init_list.push(InitMap {
+                    index: i,
+                    resource: init_differed_gbuffers_shading(
+                        &interface,
+                        &object_borrow.source_mesh.as_ref().unwrap().borrow(),
+                        &scene_mterials,
+                    ),
+                });
+            }
+        }
+    }
+
+    // Initialize render pipeline
+    for init_elem in init_list {
+        let mut scene_borrow = scene.borrow_mut();
+
+        let render_objects: &mut Vec<engine::scene::SceneObject> =
+            if scene_borrow.scene_variables.use_batched {
+                &mut scene_borrow.batched_objects
+            } else {
+                &mut scene_borrow.objects
+            };
+
+        let object_borrow = render_objects.get_mut(init_elem.index).unwrap();
+        object_borrow.shading_type = 0;
+        object_borrow.render_resource_deprecated = Some(std::rc::Rc::new(std::cell::RefCell::new(
+            init_elem.resource,
+        )));
+    }
+}
 
 fn init_differed_gbuffers_shading(
     interface: &WebGPUInterface,
     mesh: &common::Mesh,
     materials: &Vec<engine::scene::SceneMaterial>,
-) -> WebGPURenderResource {
+) -> WebGPURenderingResourceDeprecated {
     struct WriteGBuffersUniform {
         _model_matrix: [f32; 16],
         _view_matrix: [f32; 16],
@@ -1217,27 +1030,28 @@ fn init_differed_gbuffers_shading(
         });
 
     let metallic_texture_raw = &materials
-    .get(mesh.material.unwrap() as usize)
-    .unwrap()
-    .metallic_roughness_texture;
+        .get(mesh.material.unwrap() as usize)
+        .unwrap()
+        .metallic_roughness_texture;
     let metallic_texture_size = &materials
         .get(mesh.material.unwrap() as usize)
         .unwrap()
         .metallic_roughness_texture_size;
-    let metallic_texture: wgpu::Texture = interface.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("metallic roughness texture"),
-        size: wgpu::Extent3d {
-            width: metallic_texture_size[0],
-            height: metallic_texture_size[1],
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
+    let metallic_texture: wgpu::Texture =
+        interface.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("metallic roughness texture"),
+            size: wgpu::Extent3d {
+                width: metallic_texture_size[0],
+                height: metallic_texture_size[1],
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
 
     interface.queue.write_texture(
         wgpu::ImageCopyTexture {
@@ -1495,7 +1309,7 @@ fn init_differed_gbuffers_shading(
             });
     let index_count: u32 = index_data.len() as u32;
 
-    let render_resource: WebGPURenderResource = WebGPURenderResource {
+    let render_resource: WebGPURenderingResourceDeprecated = WebGPURenderingResourceDeprecated {
         _shader: shader,
         vertex_buf,
         index_buf,
@@ -1511,7 +1325,7 @@ fn init_differed_gbuffers_shading(
 }
 
 fn update_differed_gbuffers_shading(
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
+    scene: &Shared<engine::scene::Scene>,
     interface: &WebGPUInterface,
     object: &engine::scene::SceneObject,
 ) {
@@ -1524,13 +1338,13 @@ fn update_differed_gbuffers_shading(
     let aspect_ratio: f32 = width as f32 / height as f32;
 
     let scene_value = scene.borrow();
-    let eye: glam::Vec3 = scene_value.eye_location;
-    let direction: glam::Vec3 = scene_value.eye_direction;
+    let eye: glam::Vec3 = scene_value.scene_variables.eye_location;
+    let direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
 
     let mut model_matrix = glam::Mat4::from_cols_array_2d(&object.world_transform);
 
     // Force Y-up to Z-up
-    if scene_value.convert_y_to_z {
+    if scene_value.scene_variables.convert_y_to_z {
         let y_to_z_mat: glam::Mat4 =
             glam::Mat4::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
         model_matrix = y_to_z_mat * model_matrix;
@@ -1551,7 +1365,7 @@ fn update_differed_gbuffers_shading(
     let uniform_ref: &[f32] = uniform_total.as_ref();
     interface.queue.write_buffer(
         &object
-            .render_resource
+            .render_resource_deprecated
             .as_ref()
             .unwrap()
             .borrow()
@@ -1645,20 +1459,20 @@ pub fn init_differed_pipeline(interface: &WebGPUInterface) -> WebGPUDifferedReso
         });
 
     let gbuffer_metallic_roughness_texture: wgpu::Texture =
-    interface.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("metallic roughness texture"),
-        size: wgpu::Extent3d {
-            width: width,
-            height: height,
-            depth_or_array_layers: 1,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba16Float,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
+        interface.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("metallic roughness texture"),
+            size: wgpu::Extent3d {
+                width: width,
+                height: height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba16Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
 
     // bindings
 
@@ -1891,7 +1705,7 @@ pub fn init_differed_pipeline(interface: &WebGPUInterface) -> WebGPUDifferedReso
 }
 
 pub fn update_differed_buffer(
-    scene: &std::rc::Rc<std::cell::RefCell<engine::scene::Scene>>,
+    scene: &Shared<engine::scene::Scene>,
     interface: &WebGPUInterface,
     resource: &WebGPUDifferedResource,
 ) {
@@ -1905,8 +1719,8 @@ pub fn update_differed_buffer(
 
     let scene_value = scene.borrow();
 
-    let eye: glam::Vec3 = scene_value.eye_location;
-    let direction: glam::Vec3 = scene_value.eye_direction;
+    let eye: glam::Vec3 = scene_value.scene_variables.eye_location;
+    let direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
 
     // Create matrices and write buffer
     let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
@@ -1914,8 +1728,8 @@ pub fn update_differed_buffer(
         glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
     let transform_matrix: glam::Mat4 = projection_matrix * view_matrix;
 
-    let directional: [f32; 3] = scene_value.directional_light_angle;
-    let ambient: [f32; 4] = scene_value.ambient_light_color;
+    let directional: [f32; 3] = scene_value.scene_variables.directional_light_angle;
+    let ambient: [f32; 4] = scene_value.scene_variables.ambient_light_color;
     let inverse_projection: glam::Mat4 = transform_matrix.inverse();
 
     let mut uniform_total: Vec<f32> = Vec::new();
@@ -1923,10 +1737,327 @@ pub fn update_differed_buffer(
     uniform_total.extend_from_slice(&[0.0]); // Padding!
     uniform_total.extend_from_slice(&ambient);
     uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
-    uniform_total.extend_from_slice(&[scene_value.differed_debug_type as f32, 0.0, 0.0, 0.0]);
+    uniform_total.extend_from_slice(&[
+        scene_value.scene_variables.differed_debug_type as f32,
+        0.0,
+        0.0,
+        0.0,
+    ]);
 
     let uniform_ref: &[f32] = uniform_total.as_ref();
     interface
         .queue
         .write_buffer(&resource.uniform_buf, 0, bytemuck::cast_slice(uniform_ref));
+}
+
+pub fn update_differed_shading(
+    interface: &WebGPUInterface,
+    scene: &Shared<engine::scene::Scene>,
+    differed_resource: &WebGPUDifferedResource,
+) {
+    // Update gbuffer
+    if scene.borrow().scene_variables.use_batched == false {
+        for scene_object in &scene.as_ref().borrow().objects {
+            if scene_object.shading_type == 0 {
+                update_differed_gbuffers_shading(&scene, &interface, &scene_object);
+            }
+        }
+    } else {
+        for batched in &scene.as_ref().borrow().batched_objects {
+            if batched.shading_type == 0 {
+                update_differed_gbuffers_shading(&scene, &interface, &batched);
+            }
+        }
+    }
+    // Update differed
+    update_differed_buffer(&scene, &interface, &differed_resource);
+}
+
+pub fn render_differed_shading_main(
+    interface: &WebGPUInterface,
+    scene: &Shared<engine::scene::Scene>,
+    differed_resource: &WebGPUDifferedResource,
+) {
+    let frame: wgpu::SurfaceTexture = interface
+        .surface
+        .get_current_texture()
+        .expect("Failed to acquire next swap chain texture");
+
+    let view: wgpu::TextureView = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    let mut encoder: wgpu::CommandEncoder =
+        interface
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Differed render encoder"),
+            });
+
+    // gbuffer pass
+    {
+        let mut gbuffer_pass: wgpu::RenderPass<'_> =
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Differed gbuffer pass"),
+                color_attachments: &[
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &differed_resource
+                            .gbuffer_position_texture
+                            .create_view(&TextureViewDescriptor::default()),
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &differed_resource
+                            .gbuffer_normal_texture
+                            .create_view(&TextureViewDescriptor::default()),
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 1.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &differed_resource
+                            .gbuffer_albedo_texture
+                            .create_view(&TextureViewDescriptor::default()),
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                    Some(wgpu::RenderPassColorAttachment {
+                        view: &differed_resource
+                            .gbuffer_metallic_roughness_texture
+                            .create_view(&TextureViewDescriptor::default()),
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                ],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &interface
+                        .depth_texture
+                        .create_view(&wgpu::TextureViewDescriptor::default()),
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+        if scene.borrow().scene_variables.use_batched == false {
+            for object in scene.borrow().objects.iter() {
+                if object.shading_type == 0 {
+                    gbuffer_pass.set_pipeline(
+                        &object
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .render_pipeline,
+                    );
+                    gbuffer_pass.set_bind_group(
+                        0,
+                        &object
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .bind_group,
+                        &[],
+                    );
+                    if object
+                        .render_resource_deprecated
+                        .as_ref()
+                        .unwrap()
+                        .borrow()
+                        .bind_group_2
+                        .is_some()
+                    {
+                        gbuffer_pass.set_bind_group(
+                            1,
+                            &object
+                                .render_resource_deprecated
+                                .as_ref()
+                                .unwrap()
+                                .borrow()
+                                .bind_group_2,
+                            &[],
+                        );
+                    }
+                    gbuffer_pass.set_index_buffer(
+                        object
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .index_buf
+                            .slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    gbuffer_pass.set_vertex_buffer(
+                        0,
+                        object
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .vertex_buf
+                            .slice(..),
+                    );
+                    gbuffer_pass.draw_indexed(
+                        0..object
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .index_count,
+                        0,
+                        0..1,
+                    );
+                }
+            }
+        } else {
+            for batched in scene.borrow().batched_objects.iter() {
+                if batched.shading_type == 0 {
+                    gbuffer_pass.set_pipeline(
+                        &batched
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .render_pipeline,
+                    );
+                    gbuffer_pass.set_bind_group(
+                        0,
+                        &batched
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .bind_group,
+                        &[],
+                    );
+                    if batched
+                        .render_resource_deprecated
+                        .as_ref()
+                        .unwrap()
+                        .borrow()
+                        .bind_group_2
+                        .is_some()
+                    {
+                        gbuffer_pass.set_bind_group(
+                            1,
+                            &batched
+                                .render_resource_deprecated
+                                .as_ref()
+                                .unwrap()
+                                .borrow()
+                                .bind_group_2,
+                            &[],
+                        );
+                    }
+                    gbuffer_pass.set_index_buffer(
+                        batched
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .index_buf
+                            .slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    gbuffer_pass.set_vertex_buffer(
+                        0,
+                        batched
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .vertex_buf
+                            .slice(..),
+                    );
+                    gbuffer_pass.draw_indexed(
+                        0..batched
+                            .render_resource_deprecated
+                            .as_ref()
+                            .unwrap()
+                            .borrow()
+                            .index_count,
+                        0,
+                        0..1,
+                    );
+                }
+            }
+        }
+    }
+
+    // differed pass
+    {
+        let scene_value = scene.borrow();
+
+        let mut differed_pass: wgpu::RenderPass<'_> =
+            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Differed render pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: scene_value.scene_variables.background_color[0] as f64,
+                            g: scene_value.scene_variables.background_color[1] as f64,
+                            b: scene_value.scene_variables.background_color[2] as f64,
+                            a: scene_value.scene_variables.background_color[3] as f64,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+
+        if scene_value.scene_variables.differed_debug_type == 0 {
+            differed_pass.set_pipeline(&differed_resource.render_pipeline);
+        } else {
+            differed_pass.set_pipeline(&differed_resource.debug_pipeline);
+        }
+
+        differed_pass.set_bind_group(0, &differed_resource.bind_groups[0], &[]);
+        differed_pass.set_bind_group(1, &differed_resource.bind_groups[1], &[]);
+        differed_pass.draw(0..6, 0..1);
+    }
+
+    interface.queue.submit(Some(encoder.finish()));
+    frame.present();
 }

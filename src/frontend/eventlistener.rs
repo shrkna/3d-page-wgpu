@@ -1,4 +1,5 @@
 use crate::engine::define;
+use crate::types::Shared;
 
 use wasm_bindgen::JsCast;
 
@@ -12,16 +13,13 @@ pub struct ControlResponseJs {
     pub on_shift: bool,
 }
 
-pub fn add_event_listener_control(
-    event_response: &std::rc::Rc<std::cell::RefCell<ControlResponseJs>>,
-) {
+pub fn add_event_listener_control(event_response: &Shared<ControlResponseJs>) {
     let canvas: web_sys::Element = gloo::utils::document()
         .get_element_by_id(define::CANVAS_ELEMENT_ID)
         .unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
 
-    let response_clone_mouse: std::rc::Rc<std::cell::RefCell<ControlResponseJs>> =
-        event_response.clone();
+    let response_clone_mouse: Shared<ControlResponseJs> = event_response.clone();
 
     let mouse_move_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
         wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::MouseEvent| {
@@ -32,8 +30,7 @@ pub fn add_event_listener_control(
             borrowed.on_click = event.which() == 1;
         }) as Box<dyn FnMut(_)>);
 
-    let response_clone_wheel: std::rc::Rc<std::cell::RefCell<ControlResponseJs>> =
-        event_response.clone();
+    let response_clone_wheel: Shared<ControlResponseJs> = event_response.clone();
 
     let mouse_wheel_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
         wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::WheelEvent| {
@@ -43,8 +40,7 @@ pub fn add_event_listener_control(
             borrowed.wheel_delta_y = event.delta_y();
         }) as Box<dyn FnMut(_)>);
 
-    let response_clone_key_down: std::rc::Rc<std::cell::RefCell<ControlResponseJs>> =
-        event_response.clone();
+    let response_clone_key_down: Shared<ControlResponseJs> = event_response.clone();
 
     let key_down_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
         wasm_bindgen::closure::Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
@@ -53,8 +49,7 @@ pub fn add_event_listener_control(
             borrowed.on_shift = event.shift_key();
         }) as Box<dyn FnMut(_)>);
 
-    let response_clone_key_up: std::rc::Rc<std::cell::RefCell<ControlResponseJs>> =
-        event_response.clone();
+    let response_clone_key_up: Shared<ControlResponseJs> = event_response.clone();
 
     let key_up_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
         wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::KeyboardEvent| {

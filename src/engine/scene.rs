@@ -1,44 +1,16 @@
+use crate::types::Shared;
 use crate::{frontend, rendering};
-
 use glam::Vec4Swizzles;
+
+// Scene definision
 
 #[derive(Clone, Default)]
 pub struct Scene {
     // own
     pub objects: Vec<SceneObject>,
-    pub batched_objects: Vec<SceneObject>,
     pub materials: Vec<SceneMaterial>,
-    // world variables
-    pub eye_location: glam::Vec3,
-    pub eye_direction: glam::Vec3,
-    pub directional_light_angle: [f32; 3],
-    pub ambient_light_color: [f32; 4],
-    pub background_color: [f32; 4],
-    // configs
-    pub is_first_update: bool,
-    pub convert_y_to_z: bool,
-    pub scene_shading_type: ShadingType,
-    pub differed_debug_type: u8,
-    pub use_batched: bool,
-}
-impl Scene {
-    pub fn init(&mut self) {
-        self.eye_location = glam::Vec3 {
-            x: 5.0,
-            y: 0.0,
-            z: 0.5,
-        };
-        self.eye_direction = -glam::Vec3::X;
-        self.directional_light_angle = [0.0, 0.0, -1.0];
-        self.ambient_light_color = [0.0, 0.0, 0.0, 1.0];
-        self.background_color = [0.7, 0.7, 0.7, 1.0];
-        self.scene_shading_type = ShadingType::Differed;
-        self.differed_debug_type = 0;
-        self.objects = Vec::new();
-        self.convert_y_to_z = true;
-        self.is_first_update = true;
-        self.use_batched = true;
-    }
+    pub batched_objects: Vec<SceneObject>,
+    pub scene_variables: SceneVariables,
 }
 
 #[derive(Clone, Default)]
@@ -48,10 +20,11 @@ pub struct SceneObject {
     pub parent_index: Option<u32>,
     pub child_index: Vec<u32>,
     pub world_transform: [[f32; 4]; 4],
-    pub source_mesh: Option<std::rc::Rc<std::cell::RefCell<rendering::common::Mesh>>>,
+    pub source_mesh: Option<Shared<rendering::common::Mesh>>,
     pub shading_type: u8,
-    pub render_resource:
-        Option<std::rc::Rc<std::cell::RefCell<rendering::webgpu::WebGPURenderResource>>>,
+    pub rendering_resource: Option<Shared<rendering::webgpu::WebGPURenderingResource>>,
+    pub render_resource_deprecated:
+        Option<Shared<rendering::webgpu::WebGPURenderingResourceDeprecated>>,
 }
 
 #[derive(Clone, Default)]
@@ -65,6 +38,22 @@ pub struct SceneMaterial {
     pub metallic_roughness_texture_size: [u32; 2],
 }
 
+#[derive(Clone, Default)]
+pub struct SceneVariables {
+    // rendering variables
+    pub eye_location: glam::Vec3,
+    pub eye_direction: glam::Vec3,
+    pub directional_light_angle: [f32; 3],
+    pub ambient_light_color: [f32; 4],
+    pub background_color: [f32; 4],
+    pub scene_shading_type: ShadingType,
+    pub differed_debug_type: u8,
+    // config
+    pub is_first_update: bool,
+    pub convert_y_to_z: bool,
+    pub use_batched: bool,
+}
+
 #[derive(Clone, Copy, Default)]
 pub enum ShadingType {
     #[default]
@@ -73,17 +62,55 @@ pub enum ShadingType {
     Forward,
 }
 
-// Util
+// Initialize builder
 
-pub fn batch_objects(scene: &std::rc::Rc<std::cell::RefCell<Scene>>) {
+impl Scene {
+    pub fn new() -> Self {
+        Self {
+            objects: [].to_vec(),
+            batched_objects: [].to_vec(),
+            materials: [].to_vec(),
+            scene_variables: SceneVariables::new(),
+        }
+    }
+}
+
+impl SceneVariables {
+    pub fn new() -> Self {
+        Self {
+            eye_location: glam::Vec3 {
+                x: 0.0,
+                y: -2.0,
+                z: 0.0,
+            },
+            eye_direction: glam::Vec3::Y,
+            directional_light_angle: [1.0, 1.0, -1.0],
+            ambient_light_color: [0.0, 0.0, 0.0, 1.0],
+            background_color: [0.7, 0.7, 0.7, 1.0],
+            scene_shading_type: ShadingType::Forward,
+            differed_debug_type: 0,
+            is_first_update: false,
+            convert_y_to_z: true,
+            use_batched: false,
+        }
+    }
+}
+
+// Utilities
+#[allow(dead_code)]
+pub fn batch_objects(scene: &Shared<Scene>) {
+    scene.borrow_mut().batched_objects = [].to_vec();
+
     let mut batch_map: std::collections::HashMap<u32, rendering::common::Mesh> =
         std::collections::HashMap::with_capacity(scene.borrow().objects.len());
+
     for object in scene.borrow().objects.iter() {
         if object.source_mesh.is_some() {
-            let source_mesh = object.source_mesh.as_ref().unwrap();
-            let material_option = source_mesh.borrow().material;
+            let source_mesh: &Shared<rendering::common::Mesh> =
+                object.source_mesh.as_ref().unwrap();
+            let material_option: Option<u32> = source_mesh.borrow().material;
             if material_option.is_some() {
-                let material = material_option.as_ref().unwrap();
+                let material: &u32 = material_option.as_ref().unwrap();
                 // init
                 if batch_map.get(material).is_none() {
                     batch_map.insert(*material, rendering::common::Mesh::default());
@@ -96,25 +123,25 @@ pub fn batch_objects(scene: &std::rc::Rc<std::cell::RefCell<Scene>>) {
                 let rotation_matrix =
                     glam::Mat4::from_quat(trans_matrix.to_scale_rotation_translation().1);
                 for i in 0..source_vertices.len() {
-                    let vert = glam::Vec4::from_array(source_vertices[i].pos);
+                    let vert = glam::Vec4::from_array(source_vertices[i]._pos);
                     let transed_vert = trans_matrix.mul_vec4(vert);
-                    source_vertices[i].pos = transed_vert.to_array();
+                    source_vertices[i]._pos = transed_vert.to_array();
                     let norm = glam::Vec4::new(
-                        source_vertices[i].normal[0],
-                        source_vertices[i].normal[1],
-                        source_vertices[i].normal[2],
+                        source_vertices[i]._normal[0],
+                        source_vertices[i]._normal[1],
+                        source_vertices[i]._normal[2],
                         1.0,
                     );
                     let transed_norm = rotation_matrix.mul_vec4(norm);
-                    source_vertices[i].normal = [transed_norm.x, transed_norm.y, transed_norm.z];
+                    source_vertices[i]._normal = [transed_norm.x, transed_norm.y, transed_norm.z];
                     let tangent = glam::Vec4::new(
-                        source_vertices[i].tangent[0],
-                        source_vertices[i].tangent[1],
-                        source_vertices[i].tangent[2],
+                        source_vertices[i]._tangent[0],
+                        source_vertices[i]._tangent[1],
+                        source_vertices[i]._tangent[2],
                         1.0,
                     );
                     let transed_tangent = rotation_matrix.mul_vec4(tangent);
-                    source_vertices[i].tangent =
+                    source_vertices[i]._tangent =
                         [transed_tangent.x, transed_tangent.y, transed_tangent.z];
                 }
                 batched_mesh.vertices.append(&mut source_vertices);
@@ -137,7 +164,7 @@ pub fn batch_objects(scene: &std::rc::Rc<std::cell::RefCell<Scene>>) {
             shading_type: 44,
             world_transform: glam::Mat4::IDENTITY.to_cols_array_2d(),
             source_mesh: Some(std::rc::Rc::new(std::cell::RefCell::new(batch_pair.1))),
-            render_resource: None,
+            render_resource_deprecated: None,
             index: batch_pair.0,
             ..Default::default()
         };
@@ -146,12 +173,12 @@ pub fn batch_objects(scene: &std::rc::Rc<std::cell::RefCell<Scene>>) {
 }
 
 pub fn update_control(
-    scene: &std::rc::Rc<std::cell::RefCell<Scene>>,
-    in_control_event: &std::rc::Rc<std::cell::RefCell<frontend::eventlistener::ControlResponseJs>>,
+    scene: &Shared<Scene>,
+    in_control_event: &Shared<frontend::eventlistener::ControlResponseJs>,
 ) {
     let mut scene_value = scene.borrow_mut();
-    let mut eye: glam::Vec3 = scene_value.eye_location;
-    let mut direction: glam::Vec3 = scene_value.eye_direction;
+    let mut eye: glam::Vec3 = scene_value.scene_variables.eye_location;
+    let mut direction: glam::Vec3 = scene_value.scene_variables.eye_direction;
 
     let mut control_event_js = in_control_event.borrow_mut();
 
@@ -184,8 +211,8 @@ pub fn update_control(
     }
 
     // Update
-    scene_value.eye_location = eye;
-    scene_value.eye_direction = direction;
+    scene_value.scene_variables.eye_location = eye;
+    scene_value.scene_variables.eye_direction = direction;
 
     // Event context override
     control_event_js.on_click = false;

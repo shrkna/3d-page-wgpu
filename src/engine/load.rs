@@ -14,6 +14,7 @@ pub fn format_url(file_name: &str) -> reqwest::Url {
     let base = reqwest::Url::parse(&format!("{}/", origin,)).unwrap();
     base.join(file_name).unwrap()
 }
+
 #[allow(dead_code)]
 pub async fn file_status(file_name: &str) -> u16 {
     let url = format_url(file_name);
@@ -22,6 +23,7 @@ pub async fn file_status(file_name: &str) -> u16 {
 
     return code;
 }
+
 #[allow(dead_code)]
 pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
     cfg_if::cfg_if! {
@@ -32,7 +34,7 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
                 .text()
                 .await?;
         } else {
-            let path = std::path::Path::new(env!("OUT_DIR"))
+            let path = std::path::Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR not set"))
                 .join("res")
                 .join(file_name);
             let txt = std::fs::read_to_string(path)?;
@@ -41,6 +43,7 @@ pub async fn load_string(file_name: &str) -> anyhow::Result<String> {
 
     Ok(txt)
 }
+
 #[allow(dead_code)]
 pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
     cfg_if::cfg_if! {
@@ -53,7 +56,7 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
                 .to_vec();
             //log::debug!("Load {} byte from {}", data.len(), file_name);
         } else {
-            let path = std::path::Path::new(env!("OUT_DIR"))
+            let path = std::path::Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR not set"))
                 .join("res")
                 .join(file_name);
             let data = std::fs::read(path)?;
@@ -62,6 +65,7 @@ pub async fn load_binary(file_name: &str) -> anyhow::Result<Vec<u8>> {
 
     Ok(data)
 }
+
 #[allow(dead_code)]
 async fn extract_texture_data(file_name: &String) -> (Vec<u8>, [u32; 2]) {
     let mut out_data: Vec<u8> = Vec::new();
@@ -119,6 +123,7 @@ async fn extract_texture_data(file_name: &String) -> (Vec<u8>, [u32; 2]) {
 
     return (out_data, out_size);
 }
+
 #[allow(dead_code)]
 fn load_4byte_to_u32(bytes: &[u8]) -> u32 {
     let out_value: u32 = ((bytes[0] as u32) << 24)
@@ -129,7 +134,7 @@ fn load_4byte_to_u32(bytes: &[u8]) -> u32 {
     return out_value;
 }
 
-// Load .gltf
+// public
 
 pub async fn load_gltf_scene(
     file_name: &str,
@@ -198,7 +203,8 @@ pub async fn load_gltf_scene(
             } else {
                 None
             },
-            render_resource: None,
+            rendering_resource: None,
+            render_resource_deprecated: None,
             index: node.index() as u32,
             ..Default::default()
         };
@@ -259,7 +265,8 @@ pub async fn load_gltf_scene(
 
     // Load materials
     for material in gltf.materials() {
-        let scene_material = get_gltf_material(&material, &buffer_data, &folder_path).await;
+        let scene_material: engine::scene::SceneMaterial =
+            get_gltf_material(&material, &buffer_data, &folder_path).await;
         out_materials.push(scene_material);
     }
 
@@ -274,6 +281,8 @@ pub async fn load_gltf_scene(
 
     return (out_objects, out_materials);
 }
+
+// private
 
 fn get_gltf_mesh_from_node(
     node: &gltf::Node<'_>,
@@ -331,23 +340,23 @@ fn get_gltf_mesh_from_node(
         let mut vertices: Vec<rendering::common::Vertex> = Vec::new();
         for i in 0..positions.len() {
             vertices.push(rendering::common::Vertex {
-                pos: if positions.len() > 0 {
+                _pos: if positions.len() > 0 {
                     [positions[i][0], positions[i][1], positions[i][2], 1.0]
                 } else {
                     [0.0, 0.0, 0.0, 1.0]
                 },
-                color: if colors.len() > 0 {
+                _color: if colors.len() > 0 {
                     colors[i]
                 } else {
                     [0.0, 0.0, 0.0]
                 },
-                uv: if uvs.len() > 0 { uvs[i].1 } else { [0.0, 0.0] },
-                normal: if normals.len() > 0 {
+                _uv: if uvs.len() > 0 { uvs[i].1 } else { [0.0, 0.0] },
+                _normal: if normals.len() > 0 {
                     normals[i]
                 } else {
                     [0.0, 0.0, 1.0]
                 },
-                tangent: if tangents.len() > 0 {
+                _tangent: if tangents.len() > 0 {
                     [tangents[i][0], tangents[i][1], tangents[i][2]]
                 } else {
                     [0.0, 1.0, 0.0]
@@ -387,9 +396,8 @@ fn get_gltf_mesh_from_node(
 async fn get_gltf_material<'a>(
     material: &gltf::Material<'a>,
     buffer_data: &Vec<Vec<u8>>,
-    gltf_folder_path: &str
-) -> engine::scene::SceneMaterial{
-
+    gltf_folder_path: &str,
+) -> engine::scene::SceneMaterial {
     let pbr = material.pbr_metallic_roughness();
 
     // base color
@@ -504,7 +512,7 @@ async fn get_gltf_material<'a>(
     if normal_texture_data.is_empty() {
         normal_texture_data = [128, 128, 255, 255].to_vec();
     }
-    if metal_texture_data.is_empty(){
+    if metal_texture_data.is_empty() {
         metal_texture_data = [0, 0, 0, 255].to_vec();
     }
 
