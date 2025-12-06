@@ -162,6 +162,13 @@ body {
 
 // widget
 
+.widget-wrapper{
+	padding-left: 5px;
+	border-left: 1px solid $theme-color-2;
+}
+.widget-wrapper-hidden{
+	display: none;
+}
 .widget-row{
 	height: 20px;
 	font-size:smaller;
@@ -178,15 +185,20 @@ body {
 .widget-value{
 	width: calc(100% / 2);
 }
+.widget-separator{
+	height: 1px;
+	margin: 5px;
+	background-color: $theme-color-2 !important;
+}
 
 // Each widgets element
 
 .select-element{
+	text-align-last: left;
+
 	//appearance: none;
 	border: 1px solid $theme-color-2;
     border-radius: 3px;
-	text-align-last: center;
-
 	color: $theme-color-2;
 	background-color: transparent; 
 }
@@ -232,7 +244,6 @@ body {
 	width: 30%;
 	text-align: center;
 }
-
 
 .color-picker-element{
 	border: 0px;

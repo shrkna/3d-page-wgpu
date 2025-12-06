@@ -19,7 +19,7 @@ fn create_panels() {
             gloo::utils::document().create_element("input").unwrap();
         let panel_environment_radio: web_sys::HtmlInputElement =
             panel_environment_radio.dyn_into().unwrap();
-        panel_environment_radio.set_id("panel-weather-checkbox");
+        panel_environment_radio.set_id("panel-environment-checkbox");
         panel_environment_radio.set_class_name("panel-checkbox");
         panel_environment_radio
             .set_attribute("type", "checkbox")
@@ -33,7 +33,7 @@ fn create_panels() {
             gloo::utils::document().create_element("label").unwrap();
         panel_environment_label.set_class_name("panel-label");
         panel_environment_label
-            .set_attribute("for", "panel-weather-checkbox")
+            .set_attribute("for", "panel-environment-checkbox")
             .unwrap();
 
         let panel_environment_icon: web_sys::Element =
@@ -56,7 +56,7 @@ fn create_panels() {
             let panel_environment_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
                 wasm_bindgen::closure::Closure::wrap(Box::new(move |_event: web_sys::InputEvent| {
                     let environment_checkbox: web_sys::Element = gloo::utils::document()
-                        .get_element_by_id("panel-weather-checkbox")
+                        .get_element_by_id("panel-environment-checkbox")
                         .unwrap();
                     let environment_checkbox: web_sys::HtmlInputElement =
                         environment_checkbox.dyn_into().unwrap();
@@ -64,7 +64,7 @@ fn create_panels() {
                     environment_checkbox.set_checked(checked);
 
                     let view_environment: web_sys::Element = gloo::utils::document()
-                        .get_element_by_id("view-dialog-weather")
+                        .get_element_by_id("view-dialog-environment")
                         .unwrap();
                     let view_environment: web_sys::HtmlElement =
                         view_environment.dyn_into().unwrap();
@@ -236,7 +236,7 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
     // Environment view
     {
         let view_environment = gloo::utils::document().create_element("div").unwrap();
-        view_environment.set_id("view-dialog-weather");
+        view_environment.set_id("view-dialog-environment");
         view_environment.set_class_name("view-dialog view-dialog-display");
 
         let accordion_input_element = gloo::utils::document().create_element("input").unwrap();
@@ -246,20 +246,20 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
             .set_attribute("type", "checkbox")
             .unwrap();
         accordion_input_element.set_class_name("accordion-input");
-        accordion_input_element.set_id("accordion-weather");
+        accordion_input_element.set_id("accordion-environment");
         accordion_input_element.set_checked(true);
 
         let accordion_label_element = gloo::utils::document().create_element("label").unwrap();
         accordion_label_element.set_class_name("accordion-label");
         accordion_label_element.set_text_content(Some("Environment"));
         accordion_label_element
-            .set_attribute("for", "accordion-weather")
+            .set_attribute("for", "accordion-environment")
             .unwrap();
 
         let accordion_content_element = gloo::utils::document().create_element("div").unwrap();
         accordion_content_element.set_class_name("accordion-content");
 
-        // sun light
+        // directional light
         {
             let sun_accordion_input_element =
                 gloo::utils::document().create_element("input").unwrap();
@@ -607,7 +607,7 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
         let accordion_content_element = gloo::utils::document().create_element("div").unwrap();
         accordion_content_element.set_class_name("accordion-content");
 
-        // render type
+        // rendering type
         {
             let render_type_element: web_sys::Element =
                 gloo::utils::document().create_element("div").unwrap();
@@ -616,19 +616,29 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
             let render_type_label_element: web_sys::Element =
                 gloo::utils::document().create_element("div").unwrap();
             render_type_label_element.set_class_name("widget-label");
-            render_type_label_element.set_text_content(Some("Render type"));
+            render_type_label_element.set_text_content(Some("Rendering type"));
 
             let render_type_select_element =
                 gloo::utils::document().create_element("select").unwrap();
-            render_type_select_element.set_class_name("widget-value select-element");
+            render_type_select_element.set_class_name("select-element");
             render_type_select_element.set_id("render-type-select");
 
-            let render_type_option_differed =
-                gloo::utils::document().create_element("option").unwrap();
-            render_type_option_differed.set_text_content(Some("differed"));
             let render_type_option_forward =
                 gloo::utils::document().create_element("option").unwrap();
             render_type_option_forward.set_text_content(Some("forward"));
+            let render_type_option_differed =
+                gloo::utils::document().create_element("option").unwrap();
+            render_type_option_differed.set_text_content(Some("differed"));
+
+            match &scene_value.variables.scene_shading_type {
+                engine::scene::ShadingType::Forward => {
+                    render_type_option_forward.set_attribute("selected", "")
+                }
+                engine::scene::ShadingType::Differed => {
+                    render_type_option_differed.set_attribute("selected", "")
+                }
+            }
+            .unwrap();
 
             {
                 let scene_clone: Shared<engine::scene::Scene> = scene.clone();
@@ -643,15 +653,35 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
                                 render_type_element.dyn_into().unwrap();
                             let value: String = render_type_element.value();
 
+                            let forward_wrapper: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("forward-wrapper")
+                                .unwrap();
+                            let forward_wrapper: web_sys::HtmlElement =
+                                forward_wrapper.dyn_into().unwrap();
+
+                            let differed_wrapper: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("differed-wrapper")
+                                .unwrap();
+                            let differed_wrapper: web_sys::HtmlElement =
+                                differed_wrapper.dyn_into().unwrap();
+
                             let mut scene_value = scene_clone.borrow_mut();
                             match value.as_str() {
+                                "forward" => {
+                                    scene_value.variables.scene_shading_type =
+                                        engine::scene::ShadingType::Forward;
+
+                                    forward_wrapper.set_class_name("widget-wrapper");
+                                    differed_wrapper
+                                        .set_class_name("widget-wrapper widget-wrapper-hidden");
+                                }
                                 "differed" => {
                                     scene_value.variables.scene_shading_type =
                                         engine::scene::ShadingType::Differed;
-                                }
-                                "forward" => {
-                                    scene_value.variables.scene_shading_type =
-                                        engine::scene::ShadingType::Forward
+
+                                    forward_wrapper
+                                        .set_class_name("widget-wrapper widget-wrapper-hidden");
+                                    differed_wrapper.set_class_name("widget-wrapper");
                                 }
                                 _ => {}
                             }
@@ -669,10 +699,10 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
             }
 
             render_type_select_element
-                .append_child(&render_type_option_differed)
+                .append_child(&render_type_option_forward)
                 .unwrap();
             render_type_select_element
-                .append_child(&render_type_option_forward)
+                .append_child(&render_type_option_differed)
                 .unwrap();
 
             render_type_element
@@ -684,6 +714,336 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
 
             accordion_content_element
                 .append_child(&render_type_element)
+                .unwrap();
+        }
+
+        // forward wrapper
+        {
+            let forward_wrapper = gloo::utils::document().create_element("div").unwrap();
+            forward_wrapper.set_id("forward-wrapper");
+            forward_wrapper.set_class_name("widget-wrapper");
+
+            // shader type
+            {
+                let shader_type_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                shader_type_element.set_class_name("widget-row");
+
+                let shader_type_label_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                shader_type_label_element.set_class_name("widget-label");
+                shader_type_label_element.set_text_content(Some("shader"));
+
+                let shader_type_select_element =
+                    gloo::utils::document().create_element("select").unwrap();
+                shader_type_select_element.set_class_name("select-element");
+                shader_type_select_element.set_id("forward-type-select");
+
+                let shader_type_option_phong =
+                    gloo::utils::document().create_element("option").unwrap();
+                shader_type_option_phong.set_text_content(Some("phong"));
+
+                /*
+                {
+                    let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                    let buffer_type_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                        wasm_bindgen::closure::Closure::wrap(Box::new(
+                            move |_event: web_sys::InputEvent| {
+                                let buffer_type_element: web_sys::Element = gloo::utils::document()
+                                    .get_element_by_id("buffer-type-select")
+                                    .unwrap();
+                                let buffer_type_element: web_sys::HtmlSelectElement =
+                                    buffer_type_element.dyn_into().unwrap();
+                                let value: String = buffer_type_element.value();
+
+                                let mut scene_value = scene_clone.borrow_mut();
+                                match value.as_str() {
+                                    "render" => scene_value.variables.differed_debug_type = 0,
+                                    "normal" => scene_value.variables.differed_debug_type = 1,
+                                    "depth" => scene_value.variables.differed_debug_type = 2,
+                                    "albedo" => scene_value.variables.differed_debug_type = 3,
+                                    "metallic" => scene_value.variables.differed_debug_type = 4,
+                                    _ => scene_value.variables.differed_debug_type = 0,
+                                }
+                            },
+                        )
+                            as Box<dyn FnMut(_)>);
+
+                    shader_type_select_element
+                        .add_event_listener_with_callback(
+                            "change",
+                            buffer_type_closure.as_ref().unchecked_ref(),
+                        )
+                        .unwrap();
+                    buffer_type_closure.forget();
+                }*/
+
+                shader_type_select_element
+                    .append_child(&shader_type_option_phong)
+                    .unwrap();
+
+                shader_type_element
+                    .append_child(&shader_type_label_element)
+                    .unwrap();
+                shader_type_element
+                    .append_child(&shader_type_select_element)
+                    .unwrap();
+
+                forward_wrapper.append_child(&shader_type_element).unwrap();
+            }
+
+            // display
+            {
+                let forward_display_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                forward_display_element.set_class_name("widget-row");
+
+                let forward_display_label_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                forward_display_label_element.set_class_name("widget-label");
+                forward_display_label_element.set_text_content(Some("display"));
+
+                let forward_display_select_element =
+                    gloo::utils::document().create_element("select").unwrap();
+                forward_display_select_element.set_class_name("select-element");
+                forward_display_select_element.set_id("forward-display-select");
+
+                let forward_display_option_render =
+                    gloo::utils::document().create_element("option").unwrap();
+                forward_display_option_render.set_text_content(Some("rendering"));
+                let forward_display_option_normal =
+                    gloo::utils::document().create_element("option").unwrap();
+                forward_display_option_normal.set_text_content(Some("normal"));
+
+                {
+                    let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                    let forward_display_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                        wasm_bindgen::closure::Closure::wrap(Box::new(
+                            move |_event: web_sys::InputEvent| {
+                                let forward_display_element: web_sys::Element =
+                                    gloo::utils::document()
+                                        .get_element_by_id("forward-display-select")
+                                        .unwrap();
+                                let forward_display_element: web_sys::HtmlSelectElement =
+                                    forward_display_element.dyn_into().unwrap();
+                                let value: String = forward_display_element.value();
+
+                                let mut scene_value = scene_clone.borrow_mut();
+                                match value.as_str() {
+                                    "rendering" => scene_value.variables.forward_debug_type = 0,
+                                    "normal" => scene_value.variables.forward_debug_type = 1,
+                                    _ => scene_value.variables.forward_debug_type = 0,
+                                }
+                            },
+                        )
+                            as Box<dyn FnMut(_)>);
+
+                    forward_display_select_element
+                        .add_event_listener_with_callback(
+                            "change",
+                            forward_display_closure.as_ref().unchecked_ref(),
+                        )
+                        .unwrap();
+                    forward_display_closure.forget();
+                }
+
+                forward_display_select_element
+                    .append_child(&forward_display_option_render)
+                    .unwrap();
+                forward_display_select_element
+                    .append_child(&forward_display_option_normal)
+                    .unwrap();
+
+                forward_display_element
+                    .append_child(&forward_display_label_element)
+                    .unwrap();
+                forward_display_element
+                    .append_child(&forward_display_select_element)
+                    .unwrap();
+
+                forward_wrapper
+                    .append_child(&forward_display_element)
+                    .unwrap();
+            }
+
+            accordion_content_element
+                .append_child(&forward_wrapper)
+                .unwrap();
+        }
+
+        // differed wrapper
+        {
+            let differed_wrapper = gloo::utils::document().create_element("div").unwrap();
+            differed_wrapper.set_id("differed-wrapper");
+            differed_wrapper.set_class_name("widget-wrapper widget-wrapper-hidden");
+
+            // shader type
+            {
+                let shader_type_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                shader_type_element.set_class_name("widget-row");
+
+                let shader_type_label_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                shader_type_label_element.set_class_name("widget-label");
+                shader_type_label_element.set_text_content(Some("shader"));
+
+                let shader_type_select_element =
+                    gloo::utils::document().create_element("select").unwrap();
+                shader_type_select_element.set_class_name("select-element");
+                shader_type_select_element.set_id("differed-type-select");
+
+                let shader_type_option_pbr =
+                    gloo::utils::document().create_element("option").unwrap();
+                shader_type_option_pbr.set_text_content(Some("pbr"));
+
+                /*
+                {
+                    let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                    let buffer_type_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                        wasm_bindgen::closure::Closure::wrap(Box::new(
+                            move |_event: web_sys::InputEvent| {
+                                let buffer_type_element: web_sys::Element = gloo::utils::document()
+                                    .get_element_by_id("buffer-type-select")
+                                    .unwrap();
+                                let buffer_type_element: web_sys::HtmlSelectElement =
+                                    buffer_type_element.dyn_into().unwrap();
+                                let value: String = buffer_type_element.value();
+
+                                let mut scene_value = scene_clone.borrow_mut();
+                                match value.as_str() {
+                                    "render" => scene_value.variables.differed_debug_type = 0,
+                                    "normal" => scene_value.variables.differed_debug_type = 1,
+                                    "depth" => scene_value.variables.differed_debug_type = 2,
+                                    "albedo" => scene_value.variables.differed_debug_type = 3,
+                                    "metallic" => scene_value.variables.differed_debug_type = 4,
+                                    _ => scene_value.variables.differed_debug_type = 0,
+                                }
+                            },
+                        )
+                            as Box<dyn FnMut(_)>);
+
+                    shader_type_select_element
+                        .add_event_listener_with_callback(
+                            "change",
+                            buffer_type_closure.as_ref().unchecked_ref(),
+                        )
+                        .unwrap();
+                    buffer_type_closure.forget();
+                }*/
+
+                shader_type_select_element
+                    .append_child(&shader_type_option_pbr)
+                    .unwrap();
+
+                shader_type_element
+                    .append_child(&shader_type_label_element)
+                    .unwrap();
+                shader_type_element
+                    .append_child(&shader_type_select_element)
+                    .unwrap();
+
+                differed_wrapper.append_child(&shader_type_element).unwrap();
+            }
+
+            // buffer
+            {
+                let buffer_type_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                buffer_type_element.set_class_name("widget-row");
+
+                let buffer_type_label_element: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                buffer_type_label_element.set_class_name("widget-label");
+                buffer_type_label_element.set_text_content(Some("display"));
+
+                let buffer_type_select_element =
+                    gloo::utils::document().create_element("select").unwrap();
+                buffer_type_select_element.set_class_name("select-element");
+                buffer_type_select_element.set_id("buffer-type-select");
+
+                let buffer_type_option_render =
+                    gloo::utils::document().create_element("option").unwrap();
+                buffer_type_option_render.set_text_content(Some("rendering"));
+                let buffer_type_option_normal =
+                    gloo::utils::document().create_element("option").unwrap();
+                buffer_type_option_normal.set_text_content(Some("normal"));
+                let buffer_type_option_depth =
+                    gloo::utils::document().create_element("option").unwrap();
+                buffer_type_option_depth.set_text_content(Some("depth"));
+                let buffer_type_option_albedo =
+                    gloo::utils::document().create_element("option").unwrap();
+                buffer_type_option_albedo.set_text_content(Some("albedo"));
+                let buffer_type_option_metallic =
+                    gloo::utils::document().create_element("option").unwrap();
+                buffer_type_option_metallic.set_text_content(Some("metallic"));
+
+                {
+                    let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                    let buffer_type_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                        wasm_bindgen::closure::Closure::wrap(Box::new(
+                            move |_event: web_sys::InputEvent| {
+                                let buffer_type_element: web_sys::Element = gloo::utils::document()
+                                    .get_element_by_id("buffer-type-select")
+                                    .unwrap();
+                                let buffer_type_element: web_sys::HtmlSelectElement =
+                                    buffer_type_element.dyn_into().unwrap();
+                                let value: String = buffer_type_element.value();
+
+                                let mut scene_value = scene_clone.borrow_mut();
+                                match value.as_str() {
+                                    "render" => scene_value.variables.differed_debug_type = 0,
+                                    "normal" => scene_value.variables.differed_debug_type = 1,
+                                    "depth" => scene_value.variables.differed_debug_type = 2,
+                                    "albedo" => scene_value.variables.differed_debug_type = 3,
+                                    "metallic" => scene_value.variables.differed_debug_type = 4,
+                                    _ => scene_value.variables.differed_debug_type = 0,
+                                }
+                            },
+                        )
+                            as Box<dyn FnMut(_)>);
+
+                    buffer_type_select_element
+                        .add_event_listener_with_callback(
+                            "change",
+                            buffer_type_closure.as_ref().unchecked_ref(),
+                        )
+                        .unwrap();
+                    buffer_type_closure.forget();
+                }
+
+                buffer_type_select_element
+                    .append_child(&buffer_type_option_render)
+                    .unwrap();
+                buffer_type_select_element
+                    .append_child(&buffer_type_option_normal)
+                    .unwrap();
+                buffer_type_select_element
+                    .append_child(&buffer_type_option_depth)
+                    .unwrap();
+                buffer_type_select_element
+                    .append_child(&buffer_type_option_albedo)
+                    .unwrap();
+                buffer_type_select_element
+                    .append_child(&buffer_type_option_metallic)
+                    .unwrap();
+
+                buffer_type_element
+                    .append_child(&buffer_type_label_element)
+                    .unwrap();
+                buffer_type_element
+                    .append_child(&buffer_type_select_element)
+                    .unwrap();
+
+                differed_wrapper.append_child(&buffer_type_element).unwrap();
+            }
+
+            accordion_content_element
+                .append_child(&differed_wrapper)
                 .unwrap();
         }
 
@@ -766,101 +1126,6 @@ fn create_view_dialog(scene: &Shared<engine::scene::Scene>) {
 
             accordion_content_element
                 .append_child(&clearcolor_element)
-                .unwrap();
-        }
-
-        // buffer
-        {
-            let buffer_type_element: web_sys::Element =
-                gloo::utils::document().create_element("div").unwrap();
-            buffer_type_element.set_class_name("widget-row");
-
-            let buffer_type_label_element: web_sys::Element =
-                gloo::utils::document().create_element("div").unwrap();
-            buffer_type_label_element.set_class_name("widget-label");
-            buffer_type_label_element.set_text_content(Some("Buffer"));
-
-            let buffer_type_select_element =
-                gloo::utils::document().create_element("select").unwrap();
-            buffer_type_select_element.set_class_name("widget-value select-element");
-            buffer_type_select_element.set_id("buffer-type-select");
-
-            let buffer_type_option_render =
-                gloo::utils::document().create_element("option").unwrap();
-            buffer_type_option_render.set_text_content(Some("render"));
-            let buffer_type_option_normal =
-                gloo::utils::document().create_element("option").unwrap();
-            buffer_type_option_normal.set_text_content(Some("normal"));
-            let buffer_type_option_depth =
-                gloo::utils::document().create_element("option").unwrap();
-            buffer_type_option_depth.set_text_content(Some("depth"));
-            let buffer_type_option_albedo =
-                gloo::utils::document().create_element("option").unwrap();
-            buffer_type_option_albedo.set_text_content(Some("albedo"));
-            let buffer_type_option_metallic =
-                gloo::utils::document().create_element("option").unwrap();
-            buffer_type_option_metallic.set_text_content(Some("metallic"));
-
-            {
-                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
-
-                let buffer_type_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
-                    wasm_bindgen::closure::Closure::wrap(Box::new(
-                        move |_event: web_sys::InputEvent| {
-                            let buffer_type_element: web_sys::Element = gloo::utils::document()
-                                .get_element_by_id("buffer-type-select")
-                                .unwrap();
-                            let buffer_type_element: web_sys::HtmlSelectElement =
-                                buffer_type_element.dyn_into().unwrap();
-                            let value: String = buffer_type_element.value();
-
-                            let mut scene_value = scene_clone.borrow_mut();
-                            match value.as_str() {
-                                "render" => scene_value.variables.differed_debug_type = 0,
-                                "normal" => scene_value.variables.differed_debug_type = 1,
-                                "depth" => scene_value.variables.differed_debug_type = 2,
-                                "albedo" => scene_value.variables.differed_debug_type = 3,
-                                "metallic" => scene_value.variables.differed_debug_type = 4,
-                                _ => scene_value.variables.differed_debug_type = 0,
-                            }
-                        },
-                    )
-                        as Box<dyn FnMut(_)>);
-
-                buffer_type_select_element
-                    .add_event_listener_with_callback(
-                        "change",
-                        buffer_type_closure.as_ref().unchecked_ref(),
-                    )
-                    .unwrap();
-                buffer_type_closure.forget();
-            }
-
-            buffer_type_select_element
-                .append_child(&buffer_type_option_render)
-                .unwrap();
-            buffer_type_select_element
-                .append_child(&buffer_type_option_normal)
-                .unwrap();
-            buffer_type_select_element
-                .append_child(&buffer_type_option_depth)
-                .unwrap();
-            buffer_type_select_element
-                .append_child(&buffer_type_option_albedo)
-                .unwrap();
-            buffer_type_select_element
-                .append_child(&buffer_type_option_metallic)
-                .unwrap();
-
-            buffer_type_element
-                .append_child(&buffer_type_label_element)
-                .unwrap();
-            buffer_type_element
-                .append_child(&buffer_type_select_element)
-                .unwrap();
-
-            accordion_content_element
-                .append_child(&buffer_type_element)
                 .unwrap();
         }
 

@@ -47,6 +47,7 @@ pub struct SceneVariables {
     pub ambient_light_color: [f32; 4],
     pub background_color: [f32; 4],
     pub scene_shading_type: ShadingType,
+    pub forward_debug_type: u8,
     pub differed_debug_type: u8,
     // config
     pub is_first_update: bool,
@@ -57,9 +58,8 @@ pub struct SceneVariables {
 #[derive(Clone, Copy, Default)]
 pub enum ShadingType {
     #[default]
-    None,
-    Differed,
     Forward,
+    Differed,
 }
 
 // Initialize builder
@@ -81,13 +81,18 @@ impl SceneVariables {
             eye_location: glam::Vec3 {
                 x: 0.0,
                 y: -2.0,
-                z: 0.0,
+                z: 1.0,
             },
-            eye_direction: glam::Vec3::Y,
+            eye_direction: glam::Vec3 {
+                x: 0.0,
+                y: 2.0,
+                z: -1.0,
+            },
             directional_light_angle: [0.5, 1.0, -1.0],
             ambient_light_color: [0.0, 0.0, 0.0, 1.0],
-            background_color: [0.7, 0.7, 0.7, 1.0],
+            background_color: [0.0, 0.0, 0.0, 1.0],
             scene_shading_type: ShadingType::Forward,
+            forward_debug_type: 0,
             differed_debug_type: 0,
             is_first_update: false,
             convert_y_to_z: true,

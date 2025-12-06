@@ -3,7 +3,7 @@ use crate::rendering::common;
 use crate::types::Shared;
 use wasm_bindgen::JsCast;
 use wgpu::util::DeviceExt;
-use wgpu::TextureViewDescriptor;
+use wgpu::{CommandEncoder, TextureViewDescriptor};
 
 const WEBGPU_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth24Plus;
 const WEBGPU_FRONT_FACE: wgpu::FrontFace = wgpu::FrontFace::Ccw;
@@ -158,164 +158,18 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     return interface;
 }
 
-pub fn create_shader_resource(interface: &WebGPUInterface) -> WebGPUShaderResource {
-    struct PhongUniform {
-        _transform_matrix: [f32; 16],
-        _rotation_matrix: [f32; 16],
-        _directional_light: [f32; 4],
-        _ambient_light: [f32; 4],
-        _inverse_matrix: [f32; 16],
-        _buffer_type: [f32; 4],
+pub fn create_shader_resource(interface: &WebGPUInterface, name: &str) -> WebGPUShaderResource {
+    match name {
+        "Phong" => {
+            return create_phong_shader(interface);
+        }
+        "Line" => {
+            return create_line_shader(interface);
+        }
+        _ => {
+            return create_phong_shader(interface);
+        }
     }
-
-    let shader: wgpu::ShaderModule =
-        interface
-            .device
-            .create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: None,
-                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
-                    "../shader/phong.wgsl"
-                ))),
-            });
-
-    let vertex_size: usize = std::mem::size_of::<common::Vertex>();
-    let vertex_buffer_layout: [wgpu::VertexBufferLayout<'_>; 1] = [wgpu::VertexBufferLayout {
-        array_stride: vertex_size as wgpu::BufferAddress,
-        step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &[
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x4,
-                offset: 0,
-                shader_location: 0,
-            },
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: std::mem::size_of::<[f32; 9]>() as u64,
-                shader_location: 1,
-            },
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: std::mem::size_of::<[f32; 7]>() as u64,
-                shader_location: 2,
-            },
-            wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
-                offset: std::mem::size_of::<[f32; 12]>() as u64,
-                shader_location: 3,
-            },
-        ],
-    }];
-
-    let uniform_size: u64 = std::mem::size_of::<PhongUniform>() as u64;
-    let bind_group_layout: wgpu::BindGroupLayout =
-        interface
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: None,
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(uniform_size),
-                    },
-                    count: None,
-                }],
-            });
-
-    let bind_group_layout_2 =
-        interface
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("bind_group_layout_2"),
-            });
-
-    let pipeline_layout: wgpu::PipelineLayout =
-        interface
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: None,
-                bind_group_layouts: &[&bind_group_layout, &bind_group_layout_2],
-                push_constant_ranges: &[],
-            });
-
-    let render_pipeline: wgpu::RenderPipeline =
-        interface
-            .device
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: None,
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
-                    compilation_options: Default::default(),
-                    buffers: &vertex_buffer_layout,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: Some(define::FS_ENTRY_POINT),
-                    compilation_options: Default::default(),
-                    targets: &[Some(interface.swapchain_format.into())],
-                }),
-                primitive: wgpu::PrimitiveState {
-                    front_face: WEBGPU_FRONT_FACE,
-                    cull_mode: Some(WEBGPU_CULL_MODE),
-                    ..Default::default()
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: WEBGPU_DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState::default(),
-                multiview: None,
-                cache: None,
-            });
-
-    return WebGPUShaderResource {
-        _shader_name: "Phong".to_string(),
-        bind_group_layout: bind_group_layout,
-        _bind_group_layout_2: Some(bind_group_layout_2),
-        render_pipeline: render_pipeline,
-        uniform_size: uniform_size,
-    };
 }
 
 pub fn create_rendering_resource(
@@ -475,9 +329,329 @@ pub fn create_rendering_resource(
     };
 }
 
+pub fn update_rendering_main(
+    interface: &WebGPUInterface,
+    scene: &Shared<engine::scene::Scene>,
+    shader_map: &mut std::collections::HashMap<std::string::String, WebGPUShaderResource>,
+    global_resource_map: &mut std::collections::HashMap<
+        std::string::String,
+        WebGPURenderingResource,
+    >,
+) {
+    let shading_type: engine::scene::ShadingType = scene.borrow().variables.scene_shading_type;
+
+    match shading_type {
+        engine::scene::ShadingType::Forward => {
+            // Update phong resources
+            {
+                let phong_shader: &WebGPUShaderResource = &shader_map
+                    .entry("Phong".to_string())
+                    .or_insert(create_shader_resource(&interface, "Phong"));
+
+                for scene_object in scene.borrow().objects.iter() {
+                    if scene_object.rendering_resource.is_some() {
+                        update_phong_shading(
+                            &interface,
+                            &phong_shader,
+                            &scene.clone(),
+                            &scene_object,
+                        );
+                    }
+                }
+            }
+
+            // Update debug resources
+            {
+                let debug_line_shader: &WebGPUShaderResource = shader_map
+                    .entry("Line".to_string())
+                    .or_insert(create_shader_resource(&interface, "Line"));
+
+                let debug_line_rendering_resource = global_resource_map
+                    .entry("DebugLine".to_string())
+                    .or_insert(create_debug_line_rendering_resource(&interface));
+
+                update_debug_line_shading(
+                    &interface,
+                    debug_line_shader,
+                    debug_line_rendering_resource,
+                    &scene,
+                );
+            }
+
+            // Create command encoder
+            let frame: wgpu::SurfaceTexture = interface
+                .surface
+                .get_current_texture()
+                .expect("Failed to acquire next swap chain texture");
+
+            let mut encoder: wgpu::CommandEncoder =
+                interface
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Command encoder"),
+                    });
+
+            // Render pass
+            {
+                let mut render_pass: wgpu::RenderPass<'_> =
+                    create_render_pass(interface, scene, &frame, &mut encoder);
+
+                // Rendering forward shading
+                {
+                    let phong_shader: &WebGPUShaderResource =
+                        &shader_map.get("Phong").expect("Phong shader is not exist");
+                    rendering_forward_main(scene, phong_shader, &mut render_pass);
+                }
+
+                // Rendering debug contexts
+                {
+                    let debug_line_shader: &WebGPUShaderResource =
+                        shader_map.get("Line").expect("Line shader is not exist");
+
+                    let debug_line_rendering_resource = global_resource_map
+                        .get_mut("DebugLine")
+                        .expect("Debug line rendering resource is no exist");
+                    rendering_debug_main(
+                        debug_line_shader,
+                        debug_line_rendering_resource,
+                        &mut render_pass,
+                    );
+                }
+            }
+
+            interface.queue.submit(Some(encoder.finish()));
+            frame.present();
+        }
+
+        engine::scene::ShadingType::Differed => {
+            let differed_resource: WebGPUDifferedResource = init_differed_pipeline(&interface);
+            init_differed_gbuffer_pipeline(&interface, &scene);
+
+            update_differed_shading(&interface, &scene, &differed_resource);
+            render_differed_shading_main(&interface, &scene, &differed_resource);
+        }
+    }
+}
+
+fn create_render_pass<'a>(
+    interface: &WebGPUInterface,
+    scene: &Shared<engine::scene::Scene>,
+    frame: &wgpu::SurfaceTexture,
+    encoder: &'a mut CommandEncoder,
+) -> wgpu::RenderPass<'a> {
+    let frame_view: wgpu::TextureView = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+
+    let depth_texture_view: wgpu::TextureView =
+        interface
+            .depth_texture
+            .create_view(&wgpu::TextureViewDescriptor {
+                label: Some("Depth texture view"),
+                format: Some(WEBGPU_DEPTH_FORMAT),
+                aspect: wgpu::TextureAspect::All,
+                base_array_layer: 0,
+                array_layer_count: Some(1),
+                base_mip_level: 0,
+                mip_level_count: Some(1),
+                dimension: Some(wgpu::TextureViewDimension::D2),
+            });
+
+    let scene_value = scene.borrow();
+
+    let rpass: wgpu::RenderPass<'_> = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Render pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &frame_view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color {
+                    r: scene_value.variables.background_color[0] as f64,
+                    g: scene_value.variables.background_color[1] as f64,
+                    b: scene_value.variables.background_color[2] as f64,
+                    a: scene_value.variables.background_color[3] as f64,
+                }),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_texture_view,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Clear(1.0),
+                store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+        }),
+        timestamp_writes: None,
+        occlusion_query_set: None,
+    });
+
+    return rpass;
+}
+
 // Forward rendering ---------------------------------------------------------------------------
 
-pub fn update_phong_shading(
+fn create_phong_shader(interface: &WebGPUInterface) -> WebGPUShaderResource {
+    struct PhongUniform {
+        _transform_matrix: [f32; 16],
+        _rotation_matrix: [f32; 16],
+        _directional_light: [f32; 4],
+        _ambient_light: [f32; 4],
+        _inverse_matrix: [f32; 16],
+        _buffer_type: [f32; 4],
+    }
+
+    let shader: wgpu::ShaderModule =
+        interface
+            .device
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                    "../shader/phong.wgsl"
+                ))),
+            });
+
+    let vertex_size: usize = std::mem::size_of::<common::Vertex>();
+    let vertex_buffer_layout: [wgpu::VertexBufferLayout<'_>; 1] = [wgpu::VertexBufferLayout {
+        array_stride: vertex_size as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &[
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x4,
+                offset: 0,
+                shader_location: 0,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: std::mem::size_of::<[f32; 9]>() as u64,
+                shader_location: 1,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: std::mem::size_of::<[f32; 7]>() as u64,
+                shader_location: 2,
+            },
+            wgpu::VertexAttribute {
+                format: wgpu::VertexFormat::Float32x3,
+                offset: std::mem::size_of::<[f32; 12]>() as u64,
+                shader_location: 3,
+            },
+        ],
+    }];
+
+    let uniform_size: u64 = std::mem::size_of::<PhongUniform>() as u64;
+    let bind_group_layout: wgpu::BindGroupLayout =
+        interface
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(uniform_size),
+                    },
+                    count: None,
+                }],
+            });
+
+    let bind_group_layout_2 =
+        interface
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                ],
+                label: Some("bind_group_layout_2"),
+            });
+
+    let pipeline_layout: wgpu::PipelineLayout =
+        interface
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&bind_group_layout, &bind_group_layout_2],
+                push_constant_ranges: &[],
+            });
+
+    let render_pipeline: wgpu::RenderPipeline =
+        interface
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(define::VS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    buffers: &vertex_buffer_layout,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(define::FS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    targets: &[Some(interface.swapchain_format.into())],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    front_face: WEBGPU_FRONT_FACE,
+                    cull_mode: Some(WEBGPU_CULL_MODE),
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: WEBGPU_DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
+
+    return WebGPUShaderResource {
+        _shader_name: "Phong".to_string(),
+        bind_group_layout: bind_group_layout,
+        _bind_group_layout_2: Some(bind_group_layout_2),
+        render_pipeline: render_pipeline,
+        uniform_size: uniform_size,
+    };
+}
+
+fn update_phong_shading(
     interface: &WebGPUInterface,
     shader_resource: &WebGPUShaderResource,
     scene: &Shared<engine::scene::Scene>,
@@ -666,7 +840,7 @@ pub fn update_phong_shading(
     uniform_total.extend_from_slice(&ambient);
     uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
     uniform_total.extend_from_slice(&[
-        scene_value.variables.differed_debug_type as f32,
+        scene_value.variables.forward_debug_type as f32,
         0.0,
         0.0,
         0.0,
@@ -687,138 +861,329 @@ pub fn update_phong_shading(
     );
 }
 
-pub fn render_forward_shading_main(
-    interface: &WebGPUInterface,
-    shader_resource: &WebGPUShaderResource,
+fn rendering_forward_main(
     scene: &Shared<engine::scene::Scene>,
+    shader_resource: &WebGPUShaderResource,
+    render_pass: &mut wgpu::RenderPass,
 ) {
-    let frame: wgpu::SurfaceTexture = interface
-        .surface
-        .get_current_texture()
-        .expect("Failed to acquire next swap chain texture");
+    render_pass.set_pipeline(&shader_resource.render_pipeline);
 
-    let view: wgpu::TextureView = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
+    for object in scene.borrow().objects.iter() {
+        if object.rendering_resource.is_none() {
+            continue;
+        }
 
-    let depth_texture_view: wgpu::TextureView =
-        interface
-            .depth_texture
-            .create_view(&wgpu::TextureViewDescriptor {
-                label: Some("depth texture view"),
-                format: Some(WEBGPU_DEPTH_FORMAT),
-                aspect: wgpu::TextureAspect::All,
-                base_array_layer: 0,
-                array_layer_count: Some(1),
-                base_mip_level: 0,
-                mip_level_count: Some(1),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-            });
+        render_pass.set_bind_group(
+            0,
+            &object
+                .rendering_resource
+                .as_ref()
+                .expect("[draw] Rendering resource is empty")
+                .borrow()
+                .bind_group,
+            &[],
+        );
+        render_pass.set_bind_group(
+            1,
+            &object
+                .rendering_resource
+                .as_ref()
+                .unwrap()
+                .borrow()
+                .bind_group_2,
+            &[],
+        );
+        render_pass.set_index_buffer(
+            object
+                .rendering_resource
+                .as_ref()
+                .unwrap()
+                .borrow()
+                .index_buffer
+                .slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
+        render_pass.set_vertex_buffer(
+            0,
+            object
+                .rendering_resource
+                .as_ref()
+                .unwrap()
+                .borrow()
+                .vertex_buffer
+                .slice(..),
+        );
+        render_pass.draw_indexed(
+            0..object
+                .rendering_resource
+                .as_ref()
+                .unwrap()
+                .borrow()
+                .index_count,
+            0,
+            0..1,
+        );
+    }
+}
 
-    let mut encoder: wgpu::CommandEncoder =
+// Other Debug Utils
+
+fn create_line_shader(interface: &WebGPUInterface) -> WebGPUShaderResource {
+    struct LineUniform {
+        _transform_matrix: [f32; 16],
+    }
+
+    let shader: wgpu::ShaderModule =
         interface
             .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Forward render encoder"),
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(std::borrow::Cow::Borrowed(include_str!(
+                    "../shader/line.wgsl"
+                ))),
             });
 
-    {
-        let scene_value = scene.borrow();
+    let vertex_size: usize = std::mem::size_of::<[f32; 3]>();
+    let vertex_buffer_layout: [wgpu::VertexBufferLayout<'_>; 1] = [wgpu::VertexBufferLayout {
+        array_stride: vertex_size as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &[wgpu::VertexAttribute {
+            format: wgpu::VertexFormat::Float32x3,
+            offset: 0,
+            shader_location: 0,
+        }],
+    }];
 
-        let mut rpass: wgpu::RenderPass<'_> =
-            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Forward render pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: scene_value.variables.background_color[0] as f64,
-                            g: scene_value.variables.background_color[1] as f64,
-                            b: scene_value.variables.background_color[2] as f64,
-                            a: scene_value.variables.background_color[3] as f64,
-                        }),
-                        store: wgpu::StoreOp::Store,
+    let uniform_size: u64 = std::mem::size_of::<LineUniform>() as u64;
+    let bind_group_layout: wgpu::BindGroupLayout =
+        interface
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: None,
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(uniform_size),
                     },
-                })],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_texture_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
+                    count: None,
+                }],
             });
 
-        for object in scene.borrow().objects.iter() {
-            if object.rendering_resource.is_none() {
-                continue;
-            }
+    let pipeline_layout: wgpu::PipelineLayout =
+        interface
+            .device
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: None,
+                bind_group_layouts: &[&bind_group_layout],
+                push_constant_ranges: &[],
+            });
 
-            rpass.set_pipeline(&shader_resource.render_pipeline);
-            rpass.set_bind_group(
-                0,
-                &object
-                    .rendering_resource
-                    .as_ref()
-                    .expect("[draw] Rendering resource is empty")
-                    .borrow()
-                    .bind_group,
-                &[],
+    let render_pipeline: wgpu::RenderPipeline =
+        interface
+            .device
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(define::VS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    buffers: &vertex_buffer_layout,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(define::FS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    targets: &[Some(interface.swapchain_format.into())],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    front_face: WEBGPU_FRONT_FACE,
+                    cull_mode: Some(WEBGPU_CULL_MODE),
+                    topology: wgpu::PrimitiveTopology::LineList,
+                    ..Default::default()
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: WEBGPU_DEPTH_FORMAT,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
+                    stencil: wgpu::StencilState::default(),
+                    bias: wgpu::DepthBiasState::default(),
+                }),
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            });
+
+    return WebGPUShaderResource {
+        _shader_name: "Line".to_string(),
+        bind_group_layout: bind_group_layout,
+        _bind_group_layout_2: None,
+        render_pipeline: render_pipeline,
+        uniform_size: uniform_size,
+    };
+}
+
+fn create_debug_line_rendering_resource(interface: &WebGPUInterface) -> WebGPURenderingResource {
+    let mut vertex_data: Vec<f32> = std::vec::Vec::<f32>::new();
+    let mut index_data: Vec<u32> = std::vec::Vec::<u32>::new();
+
+    const LATTICE_SIZE: f32 = 0.5;
+    const LATTICE_NUMBER: u32 = 10;
+    const LATTICE_HALF: f32 = LATTICE_SIZE * (LATTICE_NUMBER as f32) / 2.0;
+    for y in 0..LATTICE_NUMBER {
+        for x in 0..LATTICE_NUMBER {
+            vertex_data.append(
+                &mut [
+                    LATTICE_SIZE * (x as f32) - LATTICE_HALF,
+                    0.0,
+                    LATTICE_SIZE * (y as f32) - LATTICE_HALF,
+                ]
+                .to_vec(),
             );
-            rpass.set_bind_group(
-                1,
-                &object
-                    .rendering_resource
-                    .as_ref()
-                    .unwrap()
-                    .borrow()
-                    .bind_group_2,
-                &[],
-            );
-            rpass.set_index_buffer(
-                object
-                    .rendering_resource
-                    .as_ref()
-                    .unwrap()
-                    .borrow()
-                    .index_buffer
-                    .slice(..),
-                wgpu::IndexFormat::Uint32,
-            );
-            rpass.set_vertex_buffer(
-                0,
-                object
-                    .rendering_resource
-                    .as_ref()
-                    .unwrap()
-                    .borrow()
-                    .vertex_buffer
-                    .slice(..),
-            );
-            rpass.draw_indexed(
-                0..object
-                    .rendering_resource
-                    .as_ref()
-                    .unwrap()
-                    .borrow()
-                    .index_count,
-                0,
-                0..1,
-            );
+            if x < (LATTICE_NUMBER - 1) {
+                index_data
+                    .append(&mut [LATTICE_NUMBER * y + x, LATTICE_NUMBER * y + (x + 1)].to_vec());
+            }
+            if y < (LATTICE_NUMBER - 1) {
+                index_data
+                    .append(&mut [LATTICE_NUMBER * y + x, LATTICE_NUMBER * (y + 1) + x].to_vec());
+            }
         }
     }
 
-    interface.queue.submit(Some(encoder.finish()));
-    frame.present();
+    //log::debug!("{:?}", vertex_data);
+    //log::debug!("{:?}", index_data);
+
+    let vertex_buf: wgpu::Buffer =
+        interface
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertex_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+    let index_buf: wgpu::Buffer =
+        interface
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&index_data),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+    let index_count: u32 = index_data.len() as u32;
+
+    return WebGPURenderingResource {
+        vertex_buffer: vertex_buf,
+        index_buffer: index_buf,
+        index_count: index_count,
+        uniform_buffer: None,
+        bind_group: None,
+        bind_group_2: None,
+        _base_color_texture: None,
+        base_color_texture_view: None,
+        base_color_texture_sampler: None,
+        _normal_texture: None,
+        normal_texture_view: None,
+        normal_texture_sampler: None,
+    };
+}
+
+fn update_debug_line_shading(
+    interface: &WebGPUInterface,
+    debug_shader_resource: &WebGPUShaderResource,
+    debug_rendering_resource: &mut WebGPURenderingResource,
+    scene: &Shared<engine::scene::Scene>,
+) {
+    if debug_rendering_resource.uniform_buffer.is_none() {
+        let uniform_buf: wgpu::Buffer = interface.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Uniform Buffer"),
+            size: debug_shader_resource.uniform_size,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        debug_rendering_resource.uniform_buffer = Some(uniform_buf);
+    }
+
+    if debug_rendering_resource.bind_group.is_none() {
+        let bind_group: wgpu::BindGroup =
+            interface
+                .device
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    layout: &debug_shader_resource.bind_group_layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: debug_rendering_resource
+                            .uniform_buffer
+                            .as_ref()
+                            .unwrap()
+                            .as_entire_binding(),
+                    }],
+                    label: Some("Bind group 0"),
+                });
+        debug_rendering_resource.bind_group = Some(bind_group);
+    }
+
+    let canvas: web_sys::Element = gloo::utils::document()
+        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .unwrap();
+    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
+    let width: u32 = canvas.client_width() as u32;
+    let height: u32 = canvas.client_height() as u32;
+    let aspect_ratio: f32 = width as f32 / height as f32;
+
+    let scene_value = scene.borrow();
+
+    let eye: glam::Vec3 = scene_value.variables.eye_location;
+    let direction: glam::Vec3 = scene_value.variables.eye_direction;
+
+    let mut model_matrix = glam::Mat4::IDENTITY;
+
+    // Force Y-up to Z-up
+    if scene_value.variables.convert_y_to_z {
+        let y_to_z_mat: glam::Mat4 =
+            glam::Mat4::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), std::f32::consts::PI / 2.0);
+        model_matrix = y_to_z_mat * model_matrix;
+    }
+
+    let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
+    let projection_matrix: glam::Mat4 =
+        glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
+    let transform_matrix: glam::Mat4 = projection_matrix * view_matrix * model_matrix;
+
+    let uniform_total: Vec<f32> = transform_matrix.to_cols_array().to_vec();
+
+    let uniform_ref: &[f32] = uniform_total.as_ref();
+    interface.queue.write_buffer(
+        &debug_rendering_resource.uniform_buffer.as_ref().unwrap(),
+        0,
+        bytemuck::cast_slice(uniform_ref),
+    );
+}
+
+fn rendering_debug_main(
+    shader_resource: &WebGPUShaderResource,
+    rendering_resource: &mut WebGPURenderingResource,
+    render_pass: &mut wgpu::RenderPass,
+) {
+    render_pass.set_pipeline(&shader_resource.render_pipeline);
+
+    render_pass.set_bind_group(0, &rendering_resource.bind_group, &[]);
+    render_pass.set_index_buffer(
+        rendering_resource.index_buffer.slice(..),
+        wgpu::IndexFormat::Uint32,
+    );
+    render_pass.set_vertex_buffer(0, rendering_resource.vertex_buffer.slice(..));
+    render_pass.draw_indexed(0..rendering_resource.index_count, 0, 0..1);
 }
 
 // Differed shading -----------------------------------------------------------------------------
 
-pub fn init_differed_gbuffer_pipeline(
+fn init_differed_gbuffer_pipeline(
     interface: &WebGPUInterface,
     scene: &Shared<engine::scene::Scene>,
 ) {
@@ -1377,7 +1742,7 @@ fn update_differed_gbuffers_shading(
     );
 }
 
-pub fn init_differed_pipeline(interface: &WebGPUInterface) -> WebGPUDifferedResource {
+fn init_differed_pipeline(interface: &WebGPUInterface) -> WebGPUDifferedResource {
     struct DifferedUniform {
         _directional_light: [f32; 4],
         _ambient_light: [f32; 4],
@@ -1706,7 +2071,7 @@ pub fn init_differed_pipeline(interface: &WebGPUInterface) -> WebGPUDifferedReso
     return resource;
 }
 
-pub fn update_differed_buffer(
+fn update_differed_buffer(
     scene: &Shared<engine::scene::Scene>,
     interface: &WebGPUInterface,
     resource: &WebGPUDifferedResource,
@@ -1752,7 +2117,7 @@ pub fn update_differed_buffer(
         .write_buffer(&resource.uniform_buf, 0, bytemuck::cast_slice(uniform_ref));
 }
 
-pub fn update_differed_shading(
+fn update_differed_shading(
     interface: &WebGPUInterface,
     scene: &Shared<engine::scene::Scene>,
     differed_resource: &WebGPUDifferedResource,
@@ -1775,7 +2140,7 @@ pub fn update_differed_shading(
     update_differed_buffer(&scene, &interface, &differed_resource);
 }
 
-pub fn render_differed_shading_main(
+fn render_differed_shading_main(
     interface: &WebGPUInterface,
     scene: &Shared<engine::scene::Scene>,
     differed_resource: &WebGPUDifferedResource,

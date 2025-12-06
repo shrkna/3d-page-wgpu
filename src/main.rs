@@ -4,7 +4,7 @@ mod types;
 mod web;
 
 use crate::{
-    rendering::webgpu::{self, create_shader_resource},
+    rendering::webgpu::{self},
     types::Shared,
 };
 use wasm_bindgen::JsCast;
@@ -33,10 +33,6 @@ pub async fn main() {
     // Initialize rendering context
     let webgpu_interface: rendering::webgpu::WebGPUInterface =
         rendering::webgpu::init_interface().await;
-    let mut shader_map: std::collections::HashMap<
-        std::string::String,
-        rendering::webgpu::WebGPUShaderResource,
-    > = std::collections::HashMap::new();
 
     // Initialize rendering resources
     let object_num: usize = scene.borrow().objects.len();
@@ -69,6 +65,18 @@ pub async fn main() {
         }
     }
 
+    // Shader resources
+    let mut shader_map: std::collections::HashMap<
+        std::string::String,
+        rendering::webgpu::WebGPUShaderResource,
+    > = std::collections::HashMap::new();
+
+    // Global resource
+    let mut global_resource_map: std::collections::HashMap<
+        std::string::String,
+        rendering::webgpu::WebGPURenderingResource,
+    > = std::collections::HashMap::new();
+
     // Javascript controls
     let control_response_js: Shared<web::eventlistener::ControlResponseJs> = std::rc::Rc::new(
         std::cell::RefCell::new(web::eventlistener::ControlResponseJs::default()),
@@ -84,56 +92,17 @@ pub async fn main() {
     *g.borrow_mut() = Some(wasm_bindgen::closure::Closure::wrap(Box::new(move || {
         engine::scene::update_control(&scene, &control_response_js);
 
-        let shading_type: engine::scene::ShadingType = scene.borrow().variables.scene_shading_type;
-
-        match shading_type {
-            engine::scene::ShadingType::Forward => {
-                let shader_resource: &webgpu::WebGPUShaderResource = &shader_map
-                    .entry("Phong".to_string())
-                    .or_insert(create_shader_resource(&webgpu_interface));
-
-                for scene_object in scene.borrow().objects.iter() {
-                    if scene_object.rendering_resource.is_some() {
-                        rendering::webgpu::update_phong_shading(
-                            &webgpu_interface,
-                            &shader_resource,
-                            &scene.clone(),
-                            &scene_object,
-                        );
-                    }
-                }
-
-                rendering::webgpu::render_forward_shading_main(
-                    &webgpu_interface,
-                    &shader_resource,
-                    &scene,
-                );
-            }
-            engine::scene::ShadingType::Differed => {
-                let differed_resource: rendering::webgpu::WebGPUDifferedResource =
-                    rendering::webgpu::init_differed_pipeline(&webgpu_interface);
-                rendering::webgpu::init_differed_gbuffer_pipeline(&webgpu_interface, &scene);
-
-                rendering::webgpu::update_differed_shading(
-                    &webgpu_interface,
-                    &scene,
-                    &differed_resource,
-                );
-                rendering::webgpu::render_differed_shading_main(
-                    &webgpu_interface,
-                    &scene,
-                    &differed_resource,
-                );
-            }
-
-            _ => {}
-        }
+        rendering::webgpu::update_rendering_main(
+            &webgpu_interface,
+            &scene,
+            &mut shader_map,
+            &mut global_resource_map,
+        );
 
         if scene.borrow().variables.is_first_update {
             scene.borrow_mut().variables.is_first_update = false;
             debug_log_with_time("Render OK");
         }
-
         request_animation_frame(f.borrow().as_ref().unwrap());
     })
         as Box<dyn FnMut()>));
