@@ -1,8 +1,8 @@
 use crate::engine::{self, define};
 use crate::rendering::common;
 use crate::rendering::{
-    bloom_shading, composite_shading, differed_shading, forward_shading, line_grid_shading,
-    sky_shading,
+    bloom_shading, composite_shading, differed_shading, forward_shading, hdr_convertion_shading,
+    line_grid_shading, sky_shading,
 };
 use crate::types::Shared;
 use wasm_bindgen::JsCast;
@@ -61,6 +61,7 @@ pub struct WebGPUUniqueResources {
     pub line_grid_shading_resource: Option<line_grid_shading::WebGPULineGridShadingResource>,
     pub bloom_shading_resource: Option<bloom_shading::WebGPUbloomShadingResource>,
     pub composite_shading_resource: Option<composite_shading::WebGPUCompositeShadingResource>,
+    pub hdr_convertion_resource: Option<hdr_convertion_shading::WebGPUHDREnvironmentResource>,
     pub sky_shading_resource: Option<sky_shading::WebGPUSkyShadingResource>,
 }
 
@@ -178,7 +179,7 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     });
 
     let (sky_hdr_data, sky_hdr_width, sky_hdr_height) =
-        engine::load::load_hdr_file(define::HDR_KLOPPENHEIM_02).await;
+        engine::load::load_hdr_file(define::SHANHAI_BUND).await;
     let sky_hdr_texture = device.create_texture_with_data(
         &queue,
         &wgpu::TextureDescriptor {
@@ -261,6 +262,17 @@ pub fn update_rendering_main(
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Main command encoder"),
             });
+
+    // HDR conversion pass
+    if scene.borrow().parameters.is_use_sky_box {
+        hdr_convertion_shading::hdr_convertion_pass(
+            &interface,
+            &scene,
+            &mut main_command_encoder,
+            &intermediate_view,
+            &mut global_resources.borrow_mut(),
+        );
+    }
 
     // Base pass (forward or differed)
     {

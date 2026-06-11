@@ -39,8 +39,10 @@ pub fn differed_shading_pass(
 
     // Initialize differed shading resources
     if global_resources.differed_shading_resource.is_none() {
-        global_resources.differed_shading_resource =
-            Some(create_differed_shading_context(&interface));
+        global_resources.differed_shading_resource = Some(create_differed_shading_context(
+            &interface,
+            global_resources,
+        ));
     }
 
     // Update differed shading resources
@@ -223,7 +225,10 @@ pub fn differed_shading_pass(
         // differed shading pass
         {
             let scene_value = scene.borrow();
+            let is_debug_out = scene.borrow().parameters.differed_debug_type != 0;
+            let is_use_ibl = global_resources.hdr_convertion_resource.is_some();
 
+            // render pass setup
             let mut differed_shading_pass: wgpu::RenderPass<'_> = command_encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("Differed shading pass"),
@@ -245,14 +250,27 @@ pub fn differed_shading_pass(
                     occlusion_query_set: None,
                 });
 
-            if scene_value.parameters.differed_debug_type == 0 {
-                differed_shading_pass.set_pipeline(
-                    &global_resources
-                        .differed_shading_resource
-                        .as_ref()
-                        .unwrap()
-                        .render_pipeline,
-                );
+            // set pipeline
+            if !is_debug_out {
+                if !is_use_ibl {
+                    differed_shading_pass.set_pipeline(
+                        &global_resources
+                            .differed_shading_resource
+                            .as_ref()
+                            .unwrap()
+                            .render_pipeline,
+                    );
+                } else {
+                    differed_shading_pass.set_pipeline(
+                        &global_resources
+                            .differed_shading_resource
+                            .as_ref()
+                            .unwrap()
+                            .ibl_render_pipeline
+                            .as_ref()
+                            .unwrap(),
+                    );
+                }
             } else {
                 differed_shading_pass.set_pipeline(
                     &global_resources
@@ -263,24 +281,42 @@ pub fn differed_shading_pass(
                 );
             }
 
-            differed_shading_pass.set_bind_group(
-                0,
-                &global_resources
-                    .differed_shading_resource
-                    .as_ref()
-                    .unwrap()
-                    .bind_groups[0],
-                &[],
-            );
-            differed_shading_pass.set_bind_group(
-                1,
-                &global_resources
-                    .differed_shading_resource
-                    .as_ref()
-                    .unwrap()
-                    .bind_groups[1],
-                &[],
-            );
+            // set bind groups
+            {
+                differed_shading_pass.set_bind_group(
+                    0,
+                    &global_resources
+                        .differed_shading_resource
+                        .as_ref()
+                        .unwrap()
+                        .bind_groups[0],
+                    &[],
+                );
+
+                differed_shading_pass.set_bind_group(
+                    1,
+                    &global_resources
+                        .differed_shading_resource
+                        .as_ref()
+                        .unwrap()
+                        .bind_groups[1],
+                    &[],
+                );
+
+                if is_use_ibl {
+                    differed_shading_pass.set_bind_group(
+                        2,
+                        &global_resources
+                            .differed_shading_resource
+                            .as_ref()
+                            .unwrap()
+                            .bind_groups[2],
+                        &[],
+                    );
+                }
+            }
+
+            // draw call
             differed_shading_pass.draw(0..6, 0..1);
         }
     }
@@ -297,18 +333,7 @@ pub struct WebGPUDifferedShadingResource {
     pub uniform_buf: wgpu::Buffer,
     pub render_pipeline: wgpu::RenderPipeline,
     pub debug_pipeline: wgpu::RenderPipeline,
-}
-
-struct DifferedUniform {
-    _directional_light: [f32; 4],
-    _ambient_light: [f32; 4],
-    _inverse_matrix: [f32; 16],
-    _debug: DifferedDebugUniform,
-}
-
-struct DifferedDebugUniform {
-    _buffer_type: f32,
-    _padding: [f32; 3],
+    pub ibl_render_pipeline: Option<wgpu::RenderPipeline>,
 }
 
 pub fn create_differed_gbuffer_shader_context(interface: &WebGPUInterface) -> WebGPUShaderContext {
@@ -760,7 +785,22 @@ fn update_differed_gbuffer_shading_resource(
     }
 }
 
-fn create_differed_shading_context(interface: &WebGPUInterface) -> WebGPUDifferedShadingResource {
+struct DifferedUniform {
+    _directional_light: [f32; 4],
+    _ambient_light: [f32; 4],
+    _inverse_matrix: [f32; 16],
+    _debug: DifferedDebugUniform,
+}
+
+struct DifferedDebugUniform {
+    _buffer_type: f32,
+    _padding: [f32; 3],
+}
+
+fn create_differed_shading_context(
+    interface: &WebGPUInterface,
+    global_resources: &mut WebGPUUniqueResources,
+) -> WebGPUDifferedShadingResource {
     let shader: wgpu::ShaderModule =
         interface
             .device
@@ -1062,7 +1102,140 @@ fn create_differed_shading_context(interface: &WebGPUInterface) -> WebGPUDiffere
     bind_groups.push(gbuffer_bind_group);
     bind_groups.push(uniform_bind_group);
 
-    let resource: WebGPUDifferedShadingResource = WebGPUDifferedShadingResource {
+    // ibl context
+    let mut ibl_render_pipeline: Option<wgpu::RenderPipeline> = None;
+    if global_resources.hdr_convertion_resource.is_some() {
+        let ibl_sampler = interface.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("IBL Sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
+        let ibl_bind_group_layout =
+            interface
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("IBL Bind Group Layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::Cube,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                view_dimension: wgpu::TextureViewDimension::Cube,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                            count: None,
+                        },
+                    ],
+                });
+
+        let ibl_bind_group = interface
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("IBL Bind Group"),
+                layout: &ibl_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(
+                            &global_resources
+                                .hdr_convertion_resource
+                                .as_ref()
+                                .unwrap()
+                                .irradiance_map
+                                .create_view(&wgpu::TextureViewDescriptor {
+                                    label: Some("Cube Sample View"),
+                                    dimension: Some(wgpu::TextureViewDimension::Cube),
+                                    ..Default::default()
+                                }),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(
+                            &global_resources
+                                .hdr_convertion_resource
+                                .as_ref()
+                                .unwrap()
+                                .prefilter_map
+                                .create_view(&wgpu::TextureViewDescriptor {
+                                    label: Some("Cube Sample View"),
+                                    dimension: Some(wgpu::TextureViewDimension::Cube),
+                                    ..Default::default()
+                                }),
+                        ),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&ibl_sampler),
+                    },
+                ],
+            });
+
+        bind_groups.push(ibl_bind_group);
+
+        let ibl_piepeline_layout =
+            interface
+                .device
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("IBL Pipeline Layout"),
+                    bind_group_layouts: &[
+                        &gbuffer_bind_group_layout,
+                        &uniform_bind_group_layout,
+                        &ibl_bind_group_layout,
+                    ],
+                    push_constant_ranges: &[],
+                });
+
+        ibl_render_pipeline = Some(interface.device.create_render_pipeline(
+            &wgpu::RenderPipelineDescriptor {
+                label: Some("IBL Render Pipeline"),
+                layout: Some(&ibl_piepeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(define::VS_ENTRY_POINT),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some("fs_ibl_main"),
+                    compilation_options: Default::default(),
+                    targets: &[Some(interface.intermediate_texture.format().into())],
+                }),
+                primitive: wgpu::PrimitiveState {
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(WEBGPU_CULL_MODE),
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                multiview: None,
+                cache: None,
+            },
+        ));
+    }
+
+    return WebGPUDifferedShadingResource {
         _shader: shader,
         gbuffer_position_texture,
         gbuffer_normal_texture,
@@ -1072,9 +1245,8 @@ fn create_differed_shading_context(interface: &WebGPUInterface) -> WebGPUDiffere
         uniform_buf,
         render_pipeline,
         debug_pipeline,
+        ibl_render_pipeline,
     };
-
-    return resource;
 }
 
 fn update_differed_shading_buffer(

@@ -302,11 +302,11 @@ pub async fn load_hdr_file(file_name: &str) -> (Vec<half::f16>, u32, u32) {
     decoder.read_image(&mut hdr_buffer).unwrap();
 
     let f32_data: &[f32] = bytemuck::cast_slice(&hdr_buffer);
-    
+
     let f16_data: Vec<half::f16> = f32_data
-    .into_iter()
-    .map(|&value| half::f16::from_f32(value))
-    .collect();
+        .into_iter()
+        .map(|&value| half::f16::from_f32(value))
+        .collect();
 
     let mut rgba_data = Vec::with_capacity((metadata.width * metadata.height * 4) as usize);
 

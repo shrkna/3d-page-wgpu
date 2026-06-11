@@ -111,7 +111,7 @@ fn fs_down_sampling_main(@location(0) uv: vec2f) -> @location(0) vec4f
 fn fs_up_sampling_main(@location(0) uv: vec2f) -> @location(0) vec4f {
     // ぼかしの半径（フィルタの広がり）。通常は0.005前後
     // 解像度に合わせて調整可能ですが、固定値でも十分綺麗にボケます
-    let d = 0.001;
+    let d = 0.005;
     
     // 3x3のテントフィルターサンプリング
     // [a][b][c]

@@ -12,39 +12,16 @@ pub fn sky_pass(
     _view: &wgpu::TextureView,
     global_resources: &mut WebGPUUniqueResources,
 ) {
+    let is_sky_enable = global_resources.hdr_convertion_resource.is_some();
+    if !is_sky_enable {
+        return;
+    }
+
     // Create sky shader resource and convert HDR to cube texture on the first update
     let is_first_update = global_resources.sky_shading_resource.is_none();
     if is_first_update {
-        global_resources.sky_shading_resource = Some(create_sky_shader_resource(&interface));
-
-        // Convert hdr to cube pass
-        {
-            let mut convert_pass =
-                command_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                    label: Some("HDR Conversion Pass"),
-                    timestamp_writes: None,
-                });
-
-            convert_pass.set_pipeline(
-                &global_resources
-                    .sky_shading_resource
-                    .as_ref()
-                    .unwrap()
-                    .hdr_convert_pipeline,
-            );
-            convert_pass.set_bind_group(
-                0,
-                &global_resources
-                    .sky_shading_resource
-                    .as_ref()
-                    .unwrap()
-                    .hdr_convert_bind_group,
-                &[],
-            );
-
-            let workgroup_count = (512 + 15) / 16;
-            convert_pass.dispatch_workgroups(workgroup_count, workgroup_count, 6);
-        }
+        global_resources.sky_shading_resource =
+            Some(create_sky_shader_resource(&interface, global_resources));
     }
 
     update_sky_shader_resource(
@@ -80,7 +57,7 @@ pub fn sky_pass(
                 .sky_pipeline,
         );
         sky_render_pass.set_bind_group(
-            1,
+            0,
             &global_resources
                 .sky_shading_resource
                 .as_ref()
@@ -96,8 +73,6 @@ pub fn sky_pass(
 // sky shader resource creation and update functions ----------------------------------------------------------------------------
 pub struct WebGPUSkyShadingResource {
     pub _shader: wgpu::ShaderModule,
-    pub hdr_convert_pipeline: wgpu::ComputePipeline,
-    pub hdr_convert_bind_group: wgpu::BindGroup,
     pub sky_uniform_buffer: wgpu::Buffer,
     pub sky_pipeline: wgpu::RenderPipeline,
     pub sky_bind_group: wgpu::BindGroup,
@@ -107,7 +82,10 @@ pub struct SkyUniformBuffer {
     pub _inv_view_projection_matrix: [[f32; 4]; 4],
 }
 
-fn create_sky_shader_resource(interface: &WebGPUInterface) -> WebGPUSkyShadingResource {
+fn create_sky_shader_resource(
+    interface: &WebGPUInterface,
+    global_resources: &mut WebGPUUniqueResources,
+) -> WebGPUSkyShadingResource {
     let shader: wgpu::ShaderModule =
         interface
             .device
@@ -118,122 +96,24 @@ fn create_sky_shader_resource(interface: &WebGPUInterface) -> WebGPUSkyShadingRe
                 ))),
             });
 
-    let sky_box_size: u32 = 512;
-
-    let hdr_texture_view = interface.sky_hdr_texture.create_view(&Default::default());
-
-    let sky_cube_texture = interface.device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("Cube Target"),
-        size: wgpu::Extent3d {
-            width: sky_box_size,
-            height: sky_box_size,
-            depth_or_array_layers: 6,
-        },
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba16Float, // HDR精度を維持
-        usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[],
-    });
-
     let hdr_sampler = interface.device.create_sampler(&wgpu::SamplerDescriptor {
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Linear,
         ..Default::default()
     });
 
-    // Convert hdr to cube texture pass
-
-    let cube_storage_view = sky_cube_texture.create_view(&wgpu::TextureViewDescriptor {
-        dimension: Some(wgpu::TextureViewDimension::D2Array),
-        ..Default::default()
-    });
-
-    let hdr_convert_bind_group_layout =
-        interface
-            .device
-            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("HDR Convert Bind Group Layout"),
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::StorageTexture {
-                            access: wgpu::StorageTextureAccess::WriteOnly,
-                            format: wgpu::TextureFormat::Rgba16Float,
-                            view_dimension: wgpu::TextureViewDimension::D2Array,
-                        },
-                        count: None,
-                    },
-                ],
-            });
-
-    let hdr_convert_bind_group = interface
-        .device
-        .create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &hdr_convert_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&hdr_texture_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&hdr_sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&cube_storage_view),
-                },
-            ],
-        });
-
-    let hdr_convert_pipeline_layout =
-        interface
-            .device
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("HDR Convert Pipeline Layout"),
-                bind_group_layouts: &[&hdr_convert_bind_group_layout],
-                push_constant_ranges: &[],
-            });
-
-    let hdr_convert_pipeline =
-        interface
-            .device
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Compute Pipeline"),
-                layout: Some(&hdr_convert_pipeline_layout),
-                module: &shader,
-                entry_point: Some("cs_convert_main"),
-                compilation_options: Default::default(),
-                cache: None,
-            });
-
     // Render sky pass
 
-    let cube_sample_view = sky_cube_texture.create_view(&wgpu::TextureViewDescriptor {
-        label: Some("Cube Sample View"),
-        dimension: Some(wgpu::TextureViewDimension::Cube), // ここをCubeにする！
-        ..Default::default()
-    });
+    let cube_sample_view = global_resources
+        .hdr_convertion_resource
+        .as_ref()
+        .unwrap()
+        .irradiance_map
+        .create_view(&wgpu::TextureViewDescriptor {
+            label: Some("Cube Sample View"),
+            dimension: Some(wgpu::TextureViewDimension::Cube), // ここをCubeにする！
+            ..Default::default()
+        });
 
     let sky_uniform_buffer = interface.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("Sky Uniform Buffer"),
@@ -274,7 +154,7 @@ fn create_sky_shader_resource(interface: &WebGPUInterface) -> WebGPUSkyShadingRe
         .device
         .create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Skybox Bind Group"),
-            layout: &sky_pipeline.get_bind_group_layout(1),
+            layout: &sky_pipeline.get_bind_group_layout(0),
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -309,8 +189,6 @@ fn create_sky_shader_resource(interface: &WebGPUInterface) -> WebGPUSkyShadingRe
 
     return WebGPUSkyShadingResource {
         _shader: shader,
-        hdr_convert_pipeline,
-        hdr_convert_bind_group,
         sky_uniform_buffer,
         sky_pipeline,
         sky_bind_group,
