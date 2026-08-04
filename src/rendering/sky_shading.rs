@@ -1,4 +1,4 @@
-use crate::engine::{self, define};
+use crate::engine::{self, constant};
 use crate::rendering::webgpu::{WebGPUInterface, WebGPUUniqueResources};
 use crate::Shared;
 use wasm_bindgen::JsCast;
@@ -201,7 +201,7 @@ fn update_sky_shader_resource(
     sky_shader_resource: &WebGPUSkyShadingResource,
 ) {
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
     let width: u32 = canvas.client_width() as u32;

@@ -1,5 +1,5 @@
 use crate::engine;
-use crate::engine::define;
+use crate::engine::constant;
 use crate::rendering::common;
 use crate::rendering::webgpu;
 use crate::rendering::webgpu::{
@@ -268,13 +268,13 @@ pub fn create_phong_shader_context(interface: &WebGPUInterface) -> WebGPUShaderC
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &vertex_buffer_layout,
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(define::FS_ENTRY_POINT),
+                    entry_point: Some(constant::FS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     targets: &[Some(interface.intermediate_texture.format().into())],
                 }),
@@ -483,7 +483,7 @@ fn update_phong_shading_resource(
     // Update uniform buffer
     {
         let canvas: web_sys::Element = gloo::utils::document()
-            .get_element_by_id(define::CANVAS_ELEMENT_ID)
+            .get_element_by_id(constant::CANVAS_ELEMENT_ID)
             .unwrap();
         let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
         let width: u32 = canvas.client_width() as u32;
@@ -511,8 +511,8 @@ fn update_phong_shading_resource(
             glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
         let transform_matrix: glam::Mat4 = projection_matrix * view_matrix * model_matrix;
 
-        let directional: [f32; 3] = scene_value.parameters.directional_light_angle;
-        let ambient: [f32; 4] = scene_value.parameters.ambient_light_color;
+        let directional: [f32; 3] = scene_value.parameters.light_parameters.directional_light_angle;
+        let ambient: [f32; 4] = scene_value.parameters.light_parameters.ambient_light_color;
         let inverse_projection: glam::Mat4 = transform_matrix.inverse();
 
         let rotaton_matrix: glam::Mat4 =

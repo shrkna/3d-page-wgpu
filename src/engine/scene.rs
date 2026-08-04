@@ -30,6 +30,7 @@ pub struct SceneMaterial {
     pub _name: Option<std::string::String>,
     pub base_color_texture: Vec<u8>,
     pub base_color_texture_size: [u32; 2],
+
     pub normal_texture: Vec<u8>,
     pub normal_texture_size: [u32; 2],
     pub metallic_roughness_texture: Vec<u8>,
@@ -44,13 +45,12 @@ pub struct SceneParameter {
     pub eye_location: glam::Vec3,
     pub eye_direction: glam::Vec3,
     // light
-    pub directional_light_angle: [f32; 3],
-    pub ambient_light_color: [f32; 4],
-    pub background_color: [f32; 4],
+    pub light_parameters: SceneLightParameter,
     // rendering config
     pub scene_shading_type: ShadingType,
     pub forward_debug_type: u8,
     pub differed_debug_type: u8,
+    pub background_color: [f32; 4],
     // sky box
     pub is_use_sky_box: bool,
     // postprocess
@@ -71,6 +71,13 @@ pub enum ShadingType {
     #[default]
     Forward,
     Differed,
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+pub struct SceneLightParameter{
+    pub directional_light_angle: [f32; 3],
+    pub directional_light_intensity: f32,
+    pub ambient_light_color: [f32; 4],
 }
 
 // Initializer
@@ -101,23 +108,26 @@ impl SceneParameter {
                 z: -1.0,
             },
             // light
-            directional_light_angle: [0.5, 1.0, -1.0],
-            ambient_light_color: [0.0, 0.0, 0.0, 1.0],
-            background_color: [0.0, 0.0, 0.0, 1.0],
+            light_parameters: SceneLightParameter {
+                directional_light_angle: [0.5, 1.0, -1.0],
+                directional_light_intensity: 1.0,
+                ambient_light_color: [0.05, 0.05, 0.05, 1.0],
+            },
             // rendering
             scene_shading_type: ShadingType::Differed,
             forward_debug_type: 0,
             differed_debug_type: 0,
+            background_color: [0.0, 0.0, 0.0, 1.0],
             // sky box
-            is_use_sky_box: true,
+            is_use_sky_box: false,
             // postprocess
             is_use_bloom: true,
-            bloom_threshold: 1.0,
+            bloom_threshold: 1.5,
             is_use_composite: true,
             is_use_tone_mapping: true,
             is_use_gamma_correction: true,
             // overlay
-            is_use_grid: false,
+            is_use_grid: true,
             // other config
             is_first_update: false,
             is_convert_y_to_z: true,

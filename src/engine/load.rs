@@ -143,6 +143,7 @@ pub async fn load_gltf_scene(
 ) -> (
     Vec<engine::scene::SceneObject>,
     Vec<engine::scene::SceneMaterial>,
+    engine::scene::SceneLightParameter,
 ) {
     let gltf_text = load_string(file_name)
         .await
@@ -176,6 +177,8 @@ pub async fn load_gltf_scene(
 
     let mut out_objects: Vec<engine::scene::SceneObject> = Vec::new();
     let mut out_materials: Vec<engine::scene::SceneMaterial> = Vec::new();
+    let mut out_light_parameters: engine::scene::SceneLightParameter =
+        engine::scene::SceneParameter::new().light_parameters;
     let mut num_node: u32 = 0;
     let mut num_verts: u32 = 0;
     let mut num_indices: u32 = 0;
@@ -184,6 +187,7 @@ pub async fn load_gltf_scene(
     for node in gltf.nodes() {
         //log::debug!("Node : {}", node.name().unwrap());
 
+        // Mesh node
         let mut mesh: Option<rendering::common::Mesh> = None;
         if node.mesh().is_some() {
             mesh = Some(get_gltf_mesh_from_node(&node, &buffer_data));
@@ -271,6 +275,24 @@ pub async fn load_gltf_scene(
         out_materials.push(scene_material);
     }
 
+    // Extract first directional light from glTF nodes and apply its world direction.
+    for node in gltf.nodes() {
+        if let Some(light) = node.light() {
+            if let gltf::khr_lights_punctual::Kind::Directional = light.kind() {
+                let world_transform = glam::Mat4::from_cols_array_2d(
+                    &out_objects.get(node.index()).unwrap().world_transform,
+                );
+                let rotation =
+                    glam::Mat3::from_quat(world_transform.to_scale_rotation_translation().1);
+                let direction = (rotation * glam::Vec3::Y).normalize_or_zero();
+                out_light_parameters.directional_light_angle = direction.to_array();
+
+                out_light_parameters.directional_light_intensity = light.intensity() / 1000.0; // Convert 
+                break;
+            }
+        }
+    }
+
     log::debug!(
         "\n {} \n nodes : {}\n verts : {},\n tris  : {},\n mat   : {}",
         &file_name,
@@ -280,7 +302,7 @@ pub async fn load_gltf_scene(
         out_materials.len()
     );
 
-    return (out_objects, out_materials);
+    return (out_objects, out_materials, out_light_parameters);
 }
 
 pub async fn load_hdr_file(file_name: &str) -> (Vec<half::f16>, u32, u32) {
@@ -390,14 +412,14 @@ fn get_gltf_mesh_from_node(
                 },
                 _uv: if uvs.len() > 0 { uvs[i].1 } else { [0.0, 0.0] },
                 _normal: if normals.len() > 0 {
-                    normals[i]
+                    [normals[i][0], normals[i][1], normals[i][2]]
                 } else {
-                    [0.0, 0.0, 1.0]
+                    [0.0, 1.0, 0.0]
                 },
                 _tangent: if tangents.len() > 0 {
                     [tangents[i][0], tangents[i][1], tangents[i][2]]
                 } else {
-                    [0.0, 1.0, 0.0]
+                    [0.0, 0.0, 1.0]
                 },
             });
         }
@@ -417,10 +439,12 @@ fn get_gltf_mesh_from_node(
 
         /*
         log::debug!(
-            "Mesh : vertice {}, indices {}",
+            "Mesh : vertice {}, indices {}, normals {}",
             mesh_vertices.len(),
-            mesh_indices.len()
-        );*/
+            mesh_indices.len(),
+            normals.len()
+        );
+        */
     }
 
     rendering::common::Mesh {
@@ -438,7 +462,10 @@ async fn get_gltf_material<'a>(
 ) -> engine::scene::SceneMaterial {
     let pbr = material.pbr_metallic_roughness();
 
-    // base color
+    // base color factor
+    let base_color_factor = pbr.base_color_factor();
+
+    // base color texture
     let mut base_color_texture_data: Vec<u8> = Vec::new();
     let mut base_color_texture_size: [u32; 2] = [1, 1];
     {
@@ -461,6 +488,8 @@ async fn get_gltf_material<'a>(
                 }
             };
         }
+
+
     }
 
     // normal map
@@ -489,9 +518,13 @@ async fn get_gltf_material<'a>(
         }
     }
 
+    // metallic roughness factor
+    let metallic_factor = pbr.metallic_factor();
+    let roughness_factor = pbr.roughness_factor();
+
     // metalic roughness texture
-    let mut metal_texture_data: Vec<u8> = Vec::new();
-    let mut metal_texture_size: [u32; 2] = [1, 1];
+    let mut metallic_roughness_texture_data: Vec<u8> = Vec::new();
+    let mut metallic_roughness_texture_size: [u32; 2] = [1, 1];
     {
         if pbr.metallic_roughness_texture().is_some() {
             let metal_texture_source = &pbr
@@ -502,12 +535,12 @@ async fn get_gltf_material<'a>(
             match metal_texture_source {
                 gltf::image::Source::View { view, mime_type: _ } => {
                     // embedded data is yet
-                    metal_texture_data = buffer_data[view.buffer().index()].clone();
+                    metallic_roughness_texture_data = buffer_data[view.buffer().index()].clone();
                 }
                 gltf::image::Source::Uri { uri, mime_type: _ } => {
                     // from url
                     let texture_path = gltf_folder_path.to_string() + uri;
-                    (metal_texture_data, metal_texture_size) =
+                    (metallic_roughness_texture_data, metallic_roughness_texture_size) =
                         extract_texture_data(&texture_path).await;
                 }
             };
@@ -545,13 +578,22 @@ async fn get_gltf_material<'a>(
 
     // empty texture
     if base_color_texture_data.is_empty() {
-        base_color_texture_data = [255, 0, 255, 255].to_vec();
+        base_color_texture_size = [1, 1];
+        base_color_texture_data = base_color_factor
+            .map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() as u8)
+            .to_vec();
     }
     if normal_texture_data.is_empty() {
         normal_texture_data = [128, 128, 255, 255].to_vec();
     }
-    if metal_texture_data.is_empty() {
-        metal_texture_data = [0, 0, 0, 255].to_vec();
+    if metallic_roughness_texture_data.is_empty() {
+        metallic_roughness_texture_size = [1, 1];
+        metallic_roughness_texture_data = vec![
+            0,
+            (roughness_factor.clamp(0.0, 1.0) * 255.0).round() as u8,
+            (metallic_factor.clamp(0.0, 1.0) * 255.0).round() as u8,
+            255,
+        ];
     }
 
     engine::scene::SceneMaterial {
@@ -560,8 +602,8 @@ async fn get_gltf_material<'a>(
         base_color_texture_size: base_color_texture_size,
         normal_texture: normal_texture_data,
         normal_texture_size: normal_texture_size,
-        metallic_roughness_texture: metal_texture_data,
-        metallic_roughness_texture_size: metal_texture_size,
+        metallic_roughness_texture: metallic_roughness_texture_data,
+        metallic_roughness_texture_size,
         ..Default::default()
     }
 }

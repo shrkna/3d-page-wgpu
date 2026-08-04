@@ -128,7 +128,7 @@ fn create_debug_dialog_environment(
                     .set_attribute("step", "0.01")
                     .unwrap();
                 directional_x_input_range.set_value(
-                    scene_value.parameters.directional_light_angle[0]
+                    scene_value.parameters.light_parameters.directional_light_angle[0]
                         .to_string()
                         .as_str(),
                 );
@@ -138,7 +138,7 @@ fn create_debug_dialog_environment(
                 directional_x_input_range_text.set_id("directional-range-x-text");
                 directional_x_input_range_text.set_class_name("range-text-element");
                 directional_x_input_range_text.set_text_content(Some(
-                    scene_value.parameters.directional_light_angle[0]
+                    scene_value.parameters.light_parameters.directional_light_angle[0]
                         .to_string()
                         .as_str(),
                 ));
@@ -157,7 +157,7 @@ fn create_debug_dialog_environment(
                                 let value: String = range_x_element.value();
 
                                 let mut scene_value = scene_clone.borrow_mut();
-                                scene_value.parameters.directional_light_angle[0] =
+                                scene_value.parameters.light_parameters.directional_light_angle[0] =
                                     value.parse::<f32>().unwrap();
 
                                 let range_x_text_element: web_sys::Element =
@@ -232,7 +232,7 @@ fn create_debug_dialog_environment(
                     .set_attribute("step", "0.01")
                     .unwrap();
                 directional_y_input_range.set_value(
-                    scene_value.parameters.directional_light_angle[1]
+                    scene_value.parameters.light_parameters.directional_light_angle[1]
                         .to_string()
                         .as_str(),
                 );
@@ -242,7 +242,7 @@ fn create_debug_dialog_environment(
                 directional_y_input_range_text.set_id("directional-range-y-text");
                 directional_y_input_range_text.set_class_name("range-text-element");
                 directional_y_input_range_text.set_text_content(Some(
-                    scene_value.parameters.directional_light_angle[1]
+                    scene_value.parameters.light_parameters.directional_light_angle[1]
                         .to_string()
                         .as_str(),
                 ));
@@ -261,7 +261,7 @@ fn create_debug_dialog_environment(
                                 let value: String = range_y_element.value();
 
                                 let mut scene_value = scene_clone.borrow_mut();
-                                scene_value.parameters.directional_light_angle[1] =
+                                scene_value.parameters.light_parameters.directional_light_angle[1] =
                                     value.parse::<f32>().unwrap();
 
                                 let range_y_text_element: web_sys::Element =
@@ -335,7 +335,7 @@ fn create_debug_dialog_environment(
                     .set_attribute("step", "0.01")
                     .unwrap();
                 directional_z_input_range.set_value(
-                    scene_value.parameters.directional_light_angle[2]
+                    scene_value.parameters.light_parameters.directional_light_angle[2]
                         .to_string()
                         .as_str(),
                 );
@@ -345,7 +345,7 @@ fn create_debug_dialog_environment(
                 directional_z_input_range_text.set_id("directional-range-z-text");
                 directional_z_input_range_text.set_class_name("range-text-element");
                 directional_z_input_range_text.set_text_content(Some(
-                    scene_value.parameters.directional_light_angle[2]
+                    scene_value.parameters.light_parameters.directional_light_angle[2]
                         .to_string()
                         .as_str(),
                 ));
@@ -364,7 +364,7 @@ fn create_debug_dialog_environment(
                                 let value: String = range_z_element.value();
 
                                 let mut scene_value = scene_clone.borrow_mut();
-                                scene_value.parameters.directional_light_angle[2] =
+                                scene_value.parameters.light_parameters.directional_light_angle[2] =
                                     value.parse::<f32>().unwrap();
 
                                 let range_z_text_element: web_sys::Element =

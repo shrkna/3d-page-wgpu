@@ -1,5 +1,5 @@
 use crate::engine;
-use crate::engine::define;
+use crate::engine::constant;
 use crate::rendering::common;
 use crate::rendering::webgpu;
 use crate::rendering::webgpu::{
@@ -473,13 +473,13 @@ pub fn create_differed_gbuffer_shader_context(interface: &WebGPUInterface) -> We
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &vertex_buffers,
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(define::FS_ENTRY_POINT),
+                    entry_point: Some(constant::FS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     targets: &[
                         Some(wgpu::ColorTargetState {
@@ -735,7 +735,7 @@ fn update_differed_gbuffer_shading_resource(
     // Update uniform buffer
     {
         let canvas: web_sys::Element = gloo::utils::document()
-            .get_element_by_id(define::CANVAS_ELEMENT_ID)
+            .get_element_by_id(constant::CANVAS_ELEMENT_ID)
             .unwrap();
         let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
         let width: u32 = canvas.client_width() as u32;
@@ -812,7 +812,7 @@ fn create_differed_shading_context(
             });
 
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .expect("Failed to get canvas element");
     let canvas: web_sys::HtmlCanvasElement = canvas
         .dyn_into()
@@ -1048,13 +1048,13 @@ fn create_differed_shading_context(
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(engine::define::FS_ENTRY_POINT),
+                    entry_point: Some(engine::constant::FS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     targets: &[Some(interface.intermediate_texture.format().into())],
                 }),
@@ -1077,7 +1077,7 @@ fn create_differed_shading_context(
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
@@ -1212,7 +1212,7 @@ fn create_differed_shading_context(
                 layout: Some(&ibl_piepeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
@@ -1255,7 +1255,7 @@ fn update_differed_shading_buffer(
     resource: &WebGPUDifferedShadingResource,
 ) {
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
     let width: u32 = canvas.client_width() as u32;
@@ -1273,13 +1273,14 @@ fn update_differed_shading_buffer(
         glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
     let transform_matrix: glam::Mat4 = projection_matrix * view_matrix;
 
-    let directional: [f32; 3] = scene_value.parameters.directional_light_angle;
-    let ambient: [f32; 4] = scene_value.parameters.ambient_light_color;
+    let directional_angle: [f32; 3] = scene_value.parameters.light_parameters.directional_light_angle;
+    let directional_intensity: f32 = scene_value.parameters.light_parameters.directional_light_intensity;
+    let ambient: [f32; 4] = scene_value.parameters.light_parameters.ambient_light_color;
     let inverse_projection: glam::Mat4 = transform_matrix.inverse();
 
     let mut uniform_total: Vec<f32> = Vec::new();
-    uniform_total.extend_from_slice(&directional);
-    uniform_total.extend_from_slice(&[0.0]); // Padding!
+    uniform_total.extend_from_slice(&directional_angle);
+    uniform_total.extend_from_slice(&[directional_intensity]);
     uniform_total.extend_from_slice(&ambient);
     uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
     uniform_total.extend_from_slice(&[

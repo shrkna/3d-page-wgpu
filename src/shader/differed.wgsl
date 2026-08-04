@@ -81,19 +81,22 @@ fn fs_main( @builtin(position) coord : vec4f ) -> @location(0) vec4f
       discard;
     }
 
-    let directional_light : vec3<f32> = normalize(u_differd.directional_light.xyz);
-    let diffuse           : f32       = max(dot(-1.0 * directional_light, normal), 0.0);
+    let directional_light           : vec3<f32> = normalize(u_differd.directional_light.xyz);
+    let directional_light_intensity : f32       = max(u_differd.directional_light.w, 0.0);
+    let n_dot_l                     : f32       = max(dot(-1.0 * directional_light, normal), 0.0);
+    let diffuse                     : f32       = n_dot_l;
 
     let view     : vec3<f32> = normalize((u_differd.inverse_matrix * position).xyz);
     let halfway  : vec3<f32> = -normalize(directional_light.xyz + view);
-    let specular : f32       = pow(max(dot(normal, halfway), 0.0), 100.0);
+    let specular : f32       = n_dot_l * pow(max(dot(normal, halfway), 0.0), 100.0);
 
     let ambient_light     : vec4<f32> = u_differd.ambient_light;
 
     let surface_color  : vec4<f32> = albedo;
     let specular_color : vec4<f32> = vec4(1.0, 1.0, 1.0, 1.0);
 
-    var frag_color = diffuse * surface_color + specular * specular_color + ambient_light;
+    let direct_color : vec4<f32> = diffuse * surface_color + specular * specular_color;
+    var frag_color : vec4<f32>   = directional_light_intensity * direct_color + ambient_light;
     return frag_color;
 }
 

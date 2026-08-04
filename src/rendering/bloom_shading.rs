@@ -1,5 +1,5 @@
 use crate::engine;
-use crate::engine::define;
+use crate::engine::constant;
 use crate::rendering::webgpu::{
     WebGPUInterface, WebGPUUniqueResources, WEBGPU_CULL_MODE, WEBGPU_FRONT_FACE,
 };
@@ -287,7 +287,7 @@ fn create_bloom_shader_resource(interface: &WebGPUInterface) -> WebGPUbloomShadi
             });
 
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .expect("Failed to get canvas element");
     let canvas: web_sys::HtmlCanvasElement = canvas
         .dyn_into()
@@ -431,7 +431,7 @@ fn create_bloom_shader_resource(interface: &WebGPUInterface) -> WebGPUbloomShadi
                 layout: Some(&extraction_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
@@ -578,7 +578,7 @@ fn create_bloom_shader_resource(interface: &WebGPUInterface) -> WebGPUbloomShadi
             layout: Some(&down_sampling_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some(define::VS_ENTRY_POINT),
+                entry_point: Some(constant::VS_ENTRY_POINT),
                 compilation_options: Default::default(),
                 buffers: &[],
             },
@@ -677,7 +677,7 @@ fn create_bloom_shader_resource(interface: &WebGPUInterface) -> WebGPUbloomShadi
             layout: Some(&up_sampling_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: Some(define::VS_ENTRY_POINT),
+                entry_point: Some(constant::VS_ENTRY_POINT),
                 compilation_options: Default::default(),
                 buffers: &[],
             },
@@ -795,7 +795,7 @@ fn create_bloom_shader_resource(interface: &WebGPUInterface) -> WebGPUbloomShadi
                 layout: Some(&resolve_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },

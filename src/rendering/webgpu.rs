@@ -1,4 +1,4 @@
-use crate::engine::{self, define};
+use crate::engine::{self, constant};
 use crate::rendering::common;
 use crate::rendering::{
     bloom_shading, composite_shading, differed_shading, forward_shading, hdr_convertion_shading,
@@ -70,7 +70,7 @@ pub struct WebGPUUniqueResources {
 /// Initialize WebGPU interface. It creates surface, device, queue, and depth texture, and returns them as WebGPUInterface struct.
 pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .expect("Failed to get canvas element");
     let canvas: web_sys::HtmlCanvasElement = canvas
         .dyn_into()
@@ -179,7 +179,7 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     });
 
     let (sky_hdr_data, sky_hdr_width, sky_hdr_height) =
-        engine::load::load_hdr_file(define::HDR_KLOPPENHEIM_02).await;
+        engine::load::load_hdr_file(constant::HDR_KLOPPENHEIM_02).await;
     let sky_hdr_texture = device.create_texture_with_data(
         &queue,
         &wgpu::TextureDescriptor {

@@ -23,8 +23,14 @@ pub async fn main() {
     let scene: Shared<engine::scene::Scene> = Shared::new(RefCell::new(scene));
 
     // Load .gltf file and initialize scene objects and materials
-    (scene.borrow_mut().objects, scene.borrow_mut().materials) =
-        engine::load::load_gltf_scene(engine::define::GLTF_LOGO_PATH).await;
+    let (objects, materials, light_parameters) =
+        engine::load::load_gltf_scene(engine::constant::GLTF_SCENE_TORUS_PATH).await;
+    {
+        let mut scene_value = scene.borrow_mut();
+        scene_value.objects = objects;
+        scene_value.materials = materials;
+        scene_value.parameters.light_parameters = light_parameters;
+    }
 
     // Batch scene objects
     engine::scene::batch_objects(&scene);

@@ -1,4 +1,4 @@
-use crate::engine::define;
+use crate::engine::constant;
 use crate::types::Shared;
 
 use wasm_bindgen::JsCast;
@@ -20,7 +20,7 @@ pub struct ControlResponseJs {
 
 pub fn add_event_listener_control(event_response: &Shared<ControlResponseJs>) {
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
 

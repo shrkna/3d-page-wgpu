@@ -1,5 +1,5 @@
 use crate::engine;
-use crate::engine::define;
+use crate::engine::constant;
 use crate::rendering::webgpu::{
     WebGPUInterface, WebGPUUniqueResources, WEBGPU_CULL_MODE, WEBGPU_FRONT_FACE,
 };
@@ -194,13 +194,13 @@ fn create_line_grid_shader_resource(interface: &WebGPUInterface) -> WebGPULineGr
                 layout: Some(&pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: Some(define::VS_ENTRY_POINT),
+                    entry_point: Some(constant::VS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     buffers: &[],
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: Some(define::FS_ENTRY_POINT),
+                    entry_point: Some(constant::FS_ENTRY_POINT),
                     compilation_options: Default::default(),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: interface.swapchain_format.into(),
@@ -246,7 +246,7 @@ fn update_line_grid_shader_resource(
     line_grid_shader_resource: &WebGPULineGridShadingResource,
 ) {
     let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(define::CANVAS_ELEMENT_ID)
+        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
         .unwrap();
     let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
     let width: u32 = canvas.client_width() as u32;
