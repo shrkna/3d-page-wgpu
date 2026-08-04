@@ -108,10 +108,10 @@ fn create_sky_shader_resource(
         .hdr_convertion_resource
         .as_ref()
         .unwrap()
-        .irradiance_map
+        .hdr_cube_texture
         .create_view(&wgpu::TextureViewDescriptor {
             label: Some("Cube Sample View"),
-            dimension: Some(wgpu::TextureViewDimension::Cube), // ここをCubeにする！
+            dimension: Some(wgpu::TextureViewDimension::Cube),
             ..Default::default()
         });
 

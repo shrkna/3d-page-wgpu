@@ -179,7 +179,7 @@ pub async fn init_interface<'a>() -> WebGPUInterface<'a> {
     });
 
     let (sky_hdr_data, sky_hdr_width, sky_hdr_height) =
-        engine::load::load_hdr_file(define::SHANHAI_BUND).await;
+        engine::load::load_hdr_file(define::HDR_KLOPPENHEIM_02).await;
     let sky_hdr_texture = device.create_texture_with_data(
         &queue,
         &wgpu::TextureDescriptor {
