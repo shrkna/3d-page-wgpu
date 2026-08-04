@@ -404,6 +404,111 @@ fn create_debug_dialog_environment(
                 .unwrap();
         }
 
+        // Intensity
+        {
+            let directional_intensity_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            directional_intensity_element.set_class_name("widget-row");
+
+            let directional_intensity_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            directional_intensity_label_element.set_class_name("widget-label");
+            directional_intensity_label_element.set_text_content(Some("Intensity"));
+
+            let directional_intensity_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            directional_intensity_content_element.set_class_name("widget-value");
+
+            {
+                let directional_intensity_input_range: web_sys::Element =
+                    gloo::utils::document().create_element("input").unwrap();
+                let directional_intensity_input_range: web_sys::HtmlInputElement =
+                    directional_intensity_input_range.dyn_into().unwrap();
+                directional_intensity_input_range.set_id("directional-range-intensity");
+                directional_intensity_input_range.set_class_name("range-element");
+                directional_intensity_input_range
+                    .set_attribute("type", "range")
+                    .unwrap();
+                directional_intensity_input_range
+                    .set_attribute("min", "0.0")
+                    .unwrap();
+                directional_intensity_input_range
+                    .set_attribute("max", "10.0")
+                    .unwrap();
+                directional_intensity_input_range
+                    .set_attribute("step", "0.01")
+                    .unwrap();
+                directional_intensity_input_range.set_value(
+                    scene_value.parameters.light_parameters.directional_light_intensity
+                        .to_string()
+                        .as_str(),
+                );
+
+                let directional_intensity_input_range_text: web_sys::Element =
+                    gloo::utils::document().create_element("div").unwrap();
+                directional_intensity_input_range_text.set_id("directional-range-intensity-text");
+                directional_intensity_input_range_text.set_class_name("range-text-element");
+                directional_intensity_input_range_text.set_text_content(Some(
+                    scene_value.parameters.light_parameters.directional_light_intensity
+                        .to_string()
+                        .as_str(),
+                ));
+
+                {
+                    let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                    let directional_range_intensity_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                        wasm_bindgen::closure::Closure::wrap(Box::new(
+                            move |_event: web_sys::InputEvent| {
+                                let range_intensity_element: web_sys::Element =
+                                    gloo::utils::document()
+                                        .get_element_by_id("directional-range-intensity")
+                                        .unwrap();
+                                let range_intensity_element: web_sys::HtmlInputElement =
+                                    range_intensity_element.dyn_into().unwrap();
+                                let value: String = range_intensity_element.value();
+
+                                let mut scene_value = scene_clone.borrow_mut();
+                                scene_value.parameters.light_parameters.directional_light_intensity =
+                                    value.parse::<f32>().unwrap();
+
+                                let range_intensity_text_element: web_sys::Element =
+                                    gloo::utils::document()
+                                        .get_element_by_id("directional-range-intensity-text")
+                                        .unwrap();
+                                range_intensity_text_element.set_text_content(Some(&value));
+                            },
+                        )
+                            as Box<dyn FnMut(_)>);
+
+                    directional_intensity_input_range
+                        .add_event_listener_with_callback(
+                            "input",
+                            directional_range_intensity_closure.as_ref().unchecked_ref(),
+                        )
+                        .unwrap();
+                    directional_range_intensity_closure.forget();
+                }
+
+                directional_intensity_content_element
+                    .append_child(&directional_intensity_input_range)
+                    .unwrap();
+                directional_intensity_content_element
+                    .append_child(&directional_intensity_input_range_text)
+                    .unwrap();
+            }
+            directional_intensity_element
+                .append_child(&directional_intensity_label_element)
+                .unwrap();
+            directional_intensity_element
+                .append_child(&directional_intensity_content_element)
+                .unwrap();
+
+            directional_accordion_content_element
+                .append_child(&directional_intensity_element)
+                .unwrap();
+        }
+
         accordion_content_element
             .append_child(&directional_accordion_input_element)
             .unwrap();
