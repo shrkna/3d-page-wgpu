@@ -185,7 +185,7 @@ pub fn create_phong_shader_context(interface: &WebGPUInterface) -> WebGPUShaderC
                 shader_location: 2,
             },
             wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float32x3,
+                format: wgpu::VertexFormat::Float32x4,
                 offset: std::mem::size_of::<[f32; 12]>() as u64,
                 shader_location: 3,
             },
@@ -511,7 +511,12 @@ fn update_phong_shading_resource(
             glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
         let transform_matrix: glam::Mat4 = projection_matrix * view_matrix * model_matrix;
 
-        let directional: [f32; 3] = scene_value.parameters.light_parameters.directional_light_angle;
+        let mut directional =
+            glam::Vec3::from_array(scene_value.parameters.light_parameters.directional_light_angle);
+        if scene_value.parameters.is_convert_y_to_z {
+            let y_to_z_rot = glam::Mat3::from_axis_angle(glam::Vec3::X, std::f32::consts::PI / 2.0);
+            directional = y_to_z_rot * directional;
+        }
         let ambient: [f32; 4] = scene_value.parameters.light_parameters.ambient_light_color;
         let inverse_projection: glam::Mat4 = transform_matrix.inverse();
 
@@ -520,7 +525,7 @@ fn update_phong_shading_resource(
 
         let mut uniform_total: Vec<f32> = transform_matrix.to_cols_array().to_vec();
         uniform_total.extend_from_slice(&rotaton_matrix.to_cols_array().to_vec());
-        uniform_total.extend_from_slice(&directional);
+        uniform_total.extend_from_slice(&directional.to_array());
         uniform_total.extend_from_slice(&[0.0]); // Padding!
         uniform_total.extend_from_slice(&ambient);
         uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());

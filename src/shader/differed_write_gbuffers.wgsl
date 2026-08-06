@@ -2,7 +2,7 @@ struct VertexOutput {
     @builtin(position) position   : vec4<f32>,
 	@location(0)       normal     : vec3<f32>,
     @location(1)       uv         : vec2<f32>,
-    @location(2)       tangent    : vec3<f32>,
+    @location(2)       tangent    : vec4<f32>,
 };
 
 struct FragmentOutput {
@@ -32,18 +32,18 @@ fn vs_main(
     @location(0) position : vec4<f32>,
     @location(1) normal   : vec3<f32>,
     @location(2) uv       : vec2<f32>,
-    @location(3) tangent  : vec3<f32>,
+    @location(3) tangent  : vec4<f32>,
 ) -> VertexOutput 
 {
-    let normal_world   = normalize(inUniform.rotation_matrix * vec4<f32>(normal, 1.0)).xyz;
-	let tangent_world  = normalize(inUniform.rotation_matrix * vec4<f32>(tangent, 1.0)).xyz;
+    let normal_world   = normalize((inUniform.rotation_matrix * vec4<f32>(normal, 0.0)).xyz);
+	let tangent_world  = normalize((inUniform.rotation_matrix * vec4<f32>(tangent.xyz, 0.0)).xyz);
 
     var output : VertexOutput;
 
     output.position  = inUniform.projection_matrix * inUniform.view_matrix * inUniform.model_matrix * position;
     output.normal    = normal_world;
     output.uv        = uv;
-    output.tangent   = tangent_world;
+    output.tangent   = vec4<f32>(tangent_world, tangent.w);
 
     return output;
 }
@@ -51,8 +51,8 @@ fn vs_main(
 @fragment
 fn fs_main(vertex: VertexOutput) -> FragmentOutput 
 {
-	let binormal_world = normalize(cross(vertex.normal, vertex.tangent));
-	let tbn_matrix     = mat3x3<f32>(vertex.tangent, binormal_world, vertex.normal);
+    let binormal_world = normalize(cross(vertex.normal, vertex.tangent.xyz) * vertex.tangent.w);
+    let tbn_matrix     = mat3x3<f32>(vertex.tangent.xyz, binormal_world, vertex.normal);
     let encoded_normal = textureSample(normal_texture, normal_sampler, vertex.uv).rgb;
     let surface_normal = normalize(encoded_normal - 0.5);
 

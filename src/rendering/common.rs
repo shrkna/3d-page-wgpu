@@ -8,7 +8,8 @@ pub struct Vertex {
     pub _color: [f32; 3],
     pub _uv: [f32; 2],
     pub _normal: [f32; 3],
-    pub _tangent: [f32; 3],
+    // glTF tangent stores handedness in w. Keep it to reconstruct bitangent correctly.
+    pub _tangent: [f32; 4],
 }
 
 // Imported mesh

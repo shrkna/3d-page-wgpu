@@ -284,7 +284,8 @@ pub async fn load_gltf_scene(
                 );
                 let rotation =
                     glam::Mat3::from_quat(world_transform.to_scale_rotation_translation().1);
-                let direction = (rotation * glam::Vec3::Y).normalize_or_zero();
+                // glTF directional light points to local -Z before node rotation.
+                let direction = (rotation * glam::Vec3::NEG_Z).normalize_or_zero();
                 out_light_parameters.directional_light_angle = direction.to_array();
 
                 out_light_parameters.directional_light_intensity = light.intensity() / 1000.0; // Convert 
@@ -417,9 +418,9 @@ fn get_gltf_mesh_from_node(
                     [0.0, 1.0, 0.0]
                 },
                 _tangent: if tangents.len() > 0 {
-                    [tangents[i][0], tangents[i][1], tangents[i][2]]
+                    [tangents[i][0], tangents[i][1], tangents[i][2], tangents[i][3]]
                 } else {
-                    [0.0, 0.0, 1.0]
+                    [1.0, 0.0, 0.0, 1.0]
                 },
             });
         }

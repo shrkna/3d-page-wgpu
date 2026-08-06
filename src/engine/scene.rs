@@ -190,28 +190,28 @@ pub fn batch_objects(scene: &Shared<Scene>) {
                 let indices_offset = batched_mesh.vertices.len() as u32;
                 let trans_matrix = glam::Mat4::from_cols_array_2d(&object.world_transform);
                 let rotation_matrix =
-                    glam::Mat4::from_quat(trans_matrix.to_scale_rotation_translation().1);
+                    glam::Mat3::from_quat(trans_matrix.to_scale_rotation_translation().1);
                 for i in 0..source_vertices.len() {
                     let vert = glam::Vec4::from_array(source_vertices[i]._pos);
                     let transed_vert = trans_matrix.mul_vec4(vert);
                     source_vertices[i]._pos = transed_vert.to_array();
-                    let norm = glam::Vec4::new(
+                    let norm = glam::Vec3::new(
                         source_vertices[i]._normal[0],
                         source_vertices[i]._normal[1],
                         source_vertices[i]._normal[2],
-                        1.0,
                     );
-                    let transed_norm = rotation_matrix.mul_vec4(norm);
-                    source_vertices[i]._normal = [transed_norm.x, transed_norm.y, transed_norm.z];
-                    let tangent = glam::Vec4::new(
+                    let transed_norm = rotation_matrix.mul_vec3(norm).normalize_or_zero();
+                    source_vertices[i]._normal = transed_norm.to_array();
+
+                    let tangent = glam::Vec3::new(
                         source_vertices[i]._tangent[0],
                         source_vertices[i]._tangent[1],
                         source_vertices[i]._tangent[2],
-                        1.0,
                     );
-                    let transed_tangent = rotation_matrix.mul_vec4(tangent);
-                    source_vertices[i]._tangent =
-                        [transed_tangent.x, transed_tangent.y, transed_tangent.z];
+                    let transed_tangent = rotation_matrix.mul_vec3(tangent).normalize_or_zero();
+                    source_vertices[i]._tangent[0] = transed_tangent.x;
+                    source_vertices[i]._tangent[1] = transed_tangent.y;
+                    source_vertices[i]._tangent[2] = transed_tangent.z;
                 }
                 batched_mesh.vertices.append(&mut source_vertices);
 
