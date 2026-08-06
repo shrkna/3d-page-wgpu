@@ -134,7 +134,7 @@ impl SceneParameter {
             light_parameters: SceneLightParameter {
                 directional_light_angle: [0.5, 1.0, -1.0],
                 directional_light_intensity: 1.0,
-                ambient_light_color: [0.01, 0.01, 0.01, 1.0],
+                ambient_light_color: [0.2, 0.2, 0.2, 1.0],
             },
             // rendering
             scene_shading_type: ShadingType::Differed,

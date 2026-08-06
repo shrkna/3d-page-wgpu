@@ -788,13 +788,8 @@ fn update_differed_gbuffer_shading_resource(
 struct DifferedUniform {
     _directional_light: [f32; 4],
     _ambient_light: [f32; 4],
-    _inverse_matrix: [f32; 16],
-    _debug: DifferedDebugUniform,
-}
-
-struct DifferedDebugUniform {
-    _buffer_type: f32,
-    _padding: [f32; 3],
+    _camera_position: [f32; 4],
+    _debug: [f32; 4],
 }
 
 fn create_differed_shading_context(
@@ -1254,24 +1249,9 @@ fn update_differed_shading_buffer(
     scene: &Shared<engine::scene::Scene>,
     resource: &WebGPUDifferedShadingResource,
 ) {
-    let canvas: web_sys::Element = gloo::utils::document()
-        .get_element_by_id(constant::CANVAS_ELEMENT_ID)
-        .unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into().unwrap();
-    let width: u32 = canvas.client_width() as u32;
-    let height: u32 = canvas.client_height() as u32;
-    let aspect_ratio: f32 = width as f32 / height as f32;
-
     let scene_value = scene.borrow();
 
     let eye: glam::Vec3 = scene_value.parameters.eye_location;
-    let direction: glam::Vec3 = scene_value.parameters.eye_direction;
-
-    // Create matrices and write buffer
-    let view_matrix = glam::Mat4::look_to_rh(eye, direction, glam::Vec3::Z);
-    let projection_matrix: glam::Mat4 =
-        glam::Mat4::perspective_rh(std::f32::consts::FRAC_PI_4, aspect_ratio, 0.01, 100.0);
-    let transform_matrix: glam::Mat4 = projection_matrix * view_matrix;
 
     let mut directional_angle =
         glam::Vec3::from_array(scene_value.parameters.light_parameters.directional_light_angle);
@@ -1281,13 +1261,13 @@ fn update_differed_shading_buffer(
     }
     let directional_intensity: f32 = scene_value.parameters.light_parameters.directional_light_intensity;
     let ambient: [f32; 4] = scene_value.parameters.light_parameters.ambient_light_color;
-    let inverse_projection: glam::Mat4 = transform_matrix.inverse();
+    let camera_position: [f32; 4] = [eye.x, eye.y, eye.z, 1.0];
 
     let mut uniform_total: Vec<f32> = Vec::new();
     uniform_total.extend_from_slice(&directional_angle.to_array());
     uniform_total.extend_from_slice(&[directional_intensity]);
     uniform_total.extend_from_slice(&ambient);
-    uniform_total.extend_from_slice(&inverse_projection.to_cols_array().to_vec());
+    uniform_total.extend_from_slice(&camera_position);
     uniform_total.extend_from_slice(&[
         scene_value.parameters.differed_debug_type as f32,
         0.0,

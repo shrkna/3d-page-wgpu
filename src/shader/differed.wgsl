@@ -2,8 +2,8 @@ struct Uniform
 {
     directional_light  : vec4<f32>,
     ambient_light      : vec4<f32>,
-    inverse_matrix     : mat4x4<f32>,
-    buffer_type        : f32,
+    camera_position    : vec4<f32>,
+    debug_params       : vec4<f32>,
 }
 
 // basic differed
@@ -22,9 +22,10 @@ const PI : f32 = radians(180.0);
 
 // pbr utility
 
-fn distribution_GGX(normal : vec3<f32>, half : vec3<f32>, a : f32) -> f32
+fn distribution_GGX(normal : vec3<f32>, half : vec3<f32>, roughness : f32) -> f32
 {
-    let a2       : f32 = a * a;
+  let a        : f32 = roughness * roughness;
+  let a2       : f32 = a * a;
     let n_dot_h  : f32 = max(dot(normal, half), 0.0);
     let n_dot_h2 : f32 = n_dot_h * n_dot_h;
 	
@@ -32,27 +33,111 @@ fn distribution_GGX(normal : vec3<f32>, half : vec3<f32>, a : f32) -> f32
     var denom : f32    = (n_dot_h2 * (a2 - 1.0) + 1.0);
     denom              = PI * denom * denom;
 	
-    return nom / denom;
+  return nom / max(denom, 0.0001);
 }
-fn geometry_schlick_GGX(n_dot_v : f32, k : f32) -> f32
+fn geometry_schlick_GGX(n_dot_v : f32, roughness : f32) -> f32
 {
+  let r = roughness + 1.0;
+  let k = (r * r) / 8.0;
     let nom   : f32 = n_dot_v;
     let denom : f32 = n_dot_v * (1.0 - k) + k;
 	
     return nom / denom;
 }
-fn geometry_smith(n: vec3<f32>, v : vec3<f32>, l : vec3<f32>, k : f32) -> f32
+fn geometry_smith(n: vec3<f32>, v : vec3<f32>, l : vec3<f32>, roughness : f32) -> f32
 {
     let n_dot_v : f32 = max(dot(n, v), 0.0);
     let n_dot_l : f32 = max(dot(n, l), 0.0);
-    let ggx1 : f32 = geometry_schlick_GGX(n_dot_v, k);
-    let ggx2 : f32 = geometry_schlick_GGX(n_dot_l, k);
+  let ggx1 : f32 = geometry_schlick_GGX(n_dot_v, roughness);
+  let ggx2 : f32 = geometry_schlick_GGX(n_dot_l, roughness);
 	
     return ggx1 * ggx2;
 }
 fn fresnel_schlick(cos_theta :f32, f0 : vec3<f32>) -> vec3<f32>
 {
     return f0 + (1.0 - f0) * pow(1.0 - cos_theta, 5.0);
+}
+
+fn safe_normalize(v : vec3<f32>) -> vec3<f32>
+{
+  let len2 = dot(v, v);
+  if (len2 <= 0.000001) {
+    return vec3<f32>(0.0, 0.0, 0.0);
+  }
+
+  return v * inverseSqrt(len2);
+}
+
+struct PbrLighting
+{
+  direct   : vec3<f32>,
+  specular : vec3<f32>,
+}
+
+fn pbr_direct_lighting(
+  normal : vec3<f32>,
+  view : vec3<f32>,
+  light : vec3<f32>,
+  albedo : vec3<f32>,
+  roughness : f32,
+  metallic : f32,
+) -> PbrLighting
+{
+  let n_dot_l : f32 = max(dot(normal, light), 0.0);
+  let n_dot_v : f32 = max(dot(normal, view), 0.0);
+
+  if (n_dot_l <= 0.0 || n_dot_v <= 0.0) {
+    return PbrLighting(vec3<f32>(0.0, 0.0, 0.0), vec3<f32>(0.0, 0.0, 0.0));
+  }
+
+  let half_vector : vec3<f32> = safe_normalize(view + light);
+  let h_dot_v : f32 = max(dot(half_vector, view), 0.0);
+
+  let base_reflectivity = vec3<f32>(0.04, 0.04, 0.04);
+  let f0 = mix(base_reflectivity, albedo, vec3<f32>(metallic, metallic, metallic));
+  let ndf = distribution_GGX(normal, half_vector, roughness);
+  let geometry = geometry_smith(normal, view, light, roughness);
+  let fresnel = fresnel_schlick(h_dot_v, f0);
+
+  let numerator = ndf * geometry * fresnel;
+  let denominator = max(4.0 * n_dot_v * n_dot_l, 0.0001);
+  let specular = numerator / denominator;
+
+  let ks = fresnel;
+  let kd = (vec3<f32>(1.0, 1.0, 1.0) - ks) * (1.0 - metallic);
+  let diffuse = kd * albedo / PI;
+  let specular_contrib = specular * n_dot_l;
+
+  return PbrLighting((diffuse + specular) * n_dot_l, specular_contrib);
+}
+
+fn pbr_ambient_diffuse_lighting(
+  normal : vec3<f32>,
+  view : vec3<f32>,
+  albedo : vec3<f32>,
+  metallic : f32,
+  ambient_irradiance : vec3<f32>,
+) -> vec3<f32>
+{
+  let n_dot_v : f32 = max(dot(normal, view), 0.0);
+  let base_reflectivity = vec3<f32>(0.04, 0.04, 0.04);
+  let f0 = mix(base_reflectivity, albedo, vec3<f32>(metallic, metallic, metallic));
+  let fresnel = fresnel_schlick(n_dot_v, f0);
+  let kd = (vec3<f32>(1.0, 1.0, 1.0) - fresnel) * (1.0 - metallic);
+
+  // Hemispherical weighting approximates "light coming from the environment"
+  // instead of a flat additive term.
+  let hemi = normal.z * 0.5 + 0.5;
+  let hemi_weight = mix(0.1, 1.0, clamp(hemi, 0.0, 1.0));
+
+  // Ambient color comes from UI controls and is treated as perceptual (sRGB-like) values.
+  // Convert to linear so low values like 0.2 do not over-brighten shadowed areas.
+  let ambient_linear = pow(
+    max(ambient_irradiance, vec3<f32>(0.0, 0.0, 0.0)),
+    vec3<f32>(2.2, 2.2, 2.2),
+  );
+
+  return kd * albedo * ambient_linear * hemi_weight / PI;
 }
 
 // render funcions
@@ -75,28 +160,40 @@ fn fs_main( @builtin(position) coord : vec4f ) -> @location(0) vec4f
     var normal   : vec3<f32> = textureLoad( t_normal, vec2i(floor(coord.xy)), 0 ).xyz;
     var depth    : f32       = textureLoad( t_depth, vec2i(floor(coord.xy)), 0 );
     var albedo   : vec4<f32> = textureLoad( t_albedo, vec2i(floor(coord.xy)), 0 );
+  let metallic_roughness   : vec4<f32> = textureLoad( t_metallic, vec2i(floor(coord.xy)), 0 );
 
     if (depth >= 1.0) 
     {
       discard;
     }
 
-    let directional_light           : vec3<f32> = normalize(u_differd.directional_light.xyz);
-    let directional_light_intensity : f32       = max(u_differd.directional_light.w, 0.0);
-    let n_dot_l                     : f32       = max(dot(-1.0 * directional_light, normal), 0.0);
-    let diffuse                     : f32       = n_dot_l;
+  normal = safe_normalize(normal);
 
-    let view     : vec3<f32> = normalize((u_differd.inverse_matrix * position).xyz);
-    let halfway  : vec3<f32> = -normalize(directional_light.xyz + view);
-    let specular : f32       = n_dot_l * pow(max(dot(normal, halfway), 0.0), 100.0);
+  let light_direction             : vec3<f32> = safe_normalize(-u_differd.directional_light.xyz);
+  let directional_light_intensity : f32       = max(u_differd.directional_light.w, 0.0);
+  let light_radiance              : f32       = directional_light_intensity;
+  let view                        : vec3<f32> = safe_normalize(u_differd.camera_position.xyz - position.xyz);
+  let roughness                   : f32       = clamp(metallic_roughness.g, 0.045, 1.0);
+  let metallic                    : f32       = clamp(metallic_roughness.b, 0.0, 1.0);
+  let lighting                    : PbrLighting = pbr_direct_lighting(
+    normal,
+    view,
+    light_direction,
+    albedo.rgb,
+    roughness,
+    metallic,
+  );
+  let direct_color                : vec3<f32> = lighting.direct;
 
-    let ambient_light     : vec4<f32> = u_differd.ambient_light;
+  let ambient_diffuse : vec3<f32> = pbr_ambient_diffuse_lighting(
+    normal,
+    view,
+    albedo.rgb,
+    metallic,
+    u_differd.ambient_light.rgb * max(u_differd.ambient_light.w, 0.0),
+  );
 
-    let surface_color  : vec4<f32> = albedo;
-    let specular_color : vec4<f32> = vec4(1.0, 1.0, 1.0, 1.0);
-
-    let direct_color : vec4<f32> = diffuse * surface_color + specular * specular_color;
-    var frag_color : vec4<f32>   = directional_light_intensity * direct_color + ambient_light;
+  var frag_color : vec4<f32> = vec4<f32>(direct_color * light_radiance + ambient_diffuse, albedo.a);
     return frag_color;
 }
 
@@ -107,27 +204,42 @@ fn fs_ibl_main( @builtin(position) coord : vec4f ) -> @location(0) vec4f
     var normal   : vec3<f32> = textureLoad( t_normal, vec2i(floor(coord.xy)), 0 ).xyz;
     var depth    : f32       = textureLoad( t_depth, vec2i(floor(coord.xy)), 0 );
     var albedo   : vec4<f32> = textureLoad( t_albedo, vec2i(floor(coord.xy)), 0 );
+  let metallic_roughness   : vec4<f32> = textureLoad( t_metallic, vec2i(floor(coord.xy)), 0 );
 
     if (depth >= 1.0) 
     {
       discard;
     }
 
-    let directional_light : vec3<f32> = normalize(u_differd.directional_light.xyz);
-    let diffuse           : f32       = max(dot(-1.0 * directional_light, normal), 0.0);
+  normal = safe_normalize(normal);
 
-    let view     : vec3<f32> = normalize((u_differd.inverse_matrix * position).xyz);
-    let halfway  : vec3<f32> = -normalize(directional_light.xyz + view);
-    let specular : f32       = pow(max(dot(normal, halfway), 0.0), 100.0);
-
-    let ambient_light     : vec4<f32> = u_differd.ambient_light;
-
-    let surface_color  : vec4<f32> = albedo;
-    let specular_color : vec4<f32> = vec4(1.0, 1.0, 1.0, 1.0);
+  let light_direction             : vec3<f32> = safe_normalize(-u_differd.directional_light.xyz);
+  let directional_light_intensity : f32       = max(u_differd.directional_light.w, 0.0);
+  let light_radiance              : f32       = directional_light_intensity;
+  let view                        : vec3<f32> = safe_normalize(u_differd.camera_position.xyz - position.xyz);
+  let roughness                   : f32       = clamp(metallic_roughness.g, 0.045, 1.0);
+  let metallic                    : f32       = clamp(metallic_roughness.b, 0.0, 1.0);
+  let lighting                    : PbrLighting = pbr_direct_lighting(
+    normal,
+    view,
+    light_direction,
+    albedo.rgb,
+    roughness,
+    metallic,
+  );
+  let direct_color                : vec3<f32> = lighting.direct;
 
     let irradiance = textureSample(t_irradiance, s_env, normal);
+  let diffuse_ibl = irradiance.rgb * albedo.rgb * (1.0 - metallic);
+  let ambient_diffuse : vec3<f32> = pbr_ambient_diffuse_lighting(
+    normal,
+    view,
+    albedo.rgb,
+    metallic,
+    u_differd.ambient_light.rgb * max(u_differd.ambient_light.w, 0.0),
+  );
 
-    var frag_color = irradiance * surface_color + specular * specular_color * 0.0 + ambient_light;
+  var frag_color = vec4<f32>(direct_color * light_radiance + diffuse_ibl + ambient_diffuse, albedo.a);
     return frag_color;
 }
 
@@ -139,6 +251,8 @@ fn fs_debug_main( @builtin(position) coord : vec4f ) -> @location(0) vec4f
     var depth    : f32       = textureLoad( t_depth, vec2i(floor(coord.xy)), 0 );
     let albedo   : vec4<f32> = textureLoad( t_albedo, vec2i(floor(coord.xy)), 0 );
     let metallic : vec4<f32> = textureLoad( t_metallic, vec2i(floor(coord.xy)), 0 );
+    let roughness : f32      = clamp(metallic.g, 0.045, 1.0);
+    let metalness : f32      = clamp(metallic.b, 0.0, 1.0);
 
     normal.x = (normal.x + 1.0) * 0.5;
     normal.y = (normal.y + 1.0) * 0.5;
@@ -146,22 +260,44 @@ fn fs_debug_main( @builtin(position) coord : vec4f ) -> @location(0) vec4f
 
     depth = (1.0 - depth) * 50.0;
 
+    let shading_normal             : vec3<f32> = safe_normalize(textureLoad( t_normal, vec2i(floor(coord.xy)), 0 ).xyz);
+    let light_direction            : vec3<f32> = safe_normalize(-u_differd.directional_light.xyz);
+    let view                       : vec3<f32> = safe_normalize(u_differd.camera_position.xyz - position.xyz);
+    let directional_light_intensity: f32       = max(u_differd.directional_light.w, 0.0);
+    let light_radiance             : f32       = directional_light_intensity;
+    let lighting                   : PbrLighting = pbr_direct_lighting(
+      shading_normal,
+      view,
+      light_direction,
+      albedo.rgb,
+      roughness,
+      metalness,
+    );
+
     // ummm
-    if(u_differd.buffer_type == 1.0)
+    if(u_differd.debug_params.x == 1.0)
     {
       return vec4(normal, 1.0);
     }
-    else if(u_differd.buffer_type == 2.0)
+    else if(u_differd.debug_params.x == 2.0)
     {
       return vec4(depth, 0.0, 0.0, 1.0);
     }
-    else if(u_differd.buffer_type == 3.0)
+    else if(u_differd.debug_params.x == 3.0)
     {
       return albedo;
     }
-    else if(u_differd.buffer_type == 4.0)
+    else if(u_differd.debug_params.x == 4.0)
     {
-      return metallic;
+      return vec4(vec3<f32>(metalness), 1.0);
+    }
+    else if(u_differd.debug_params.x == 5.0)
+    {
+      return vec4(vec3<f32>(roughness), 1.0);
+    }
+    else if(u_differd.debug_params.x == 6.0)
+    {
+      return vec4(lighting.specular * light_radiance, 1.0);
     }
 
     return vec4(depth, 0.0, 0.0, 1.0);

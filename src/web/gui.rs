@@ -385,7 +385,7 @@ fn create_debug_dialog_environment(
                 "directional-range-intensity",
                 scene_value.parameters.light_parameters.directional_light_intensity,
                 "0.0",
-                "10.0",
+                "1.0",
                 "0.01",
             );
             let directional_intensity_input_range_text = create_range_value_text(
@@ -447,6 +447,265 @@ fn create_debug_dialog_environment(
             .unwrap();
         accordion_content_element
             .append_child(&directional_accordion_content_element)
+            .unwrap();
+    }
+
+    // ambient light
+    {
+        let ambient_accordion_input_element =
+            gloo::utils::document().create_element("input").unwrap();
+        let ambient_accordion_input_element: web_sys::HtmlInputElement =
+            ambient_accordion_input_element.dyn_into().unwrap();
+        ambient_accordion_input_element
+            .set_attribute("type", "checkbox")
+            .unwrap();
+        ambient_accordion_input_element.set_class_name("accordion-input");
+        ambient_accordion_input_element.set_id("accordion-ambient");
+
+        let ambient_accordion_label_element =
+            gloo::utils::document().create_element("label").unwrap();
+        ambient_accordion_label_element.set_class_name("accordion-label inner-accordion-label");
+        ambient_accordion_label_element.set_text_content(Some("Ambient Light"));
+        ambient_accordion_label_element
+            .set_attribute("for", "accordion-ambient")
+            .unwrap();
+
+        let ambient_accordion_content_element =
+            gloo::utils::document().create_element("div").unwrap();
+        ambient_accordion_content_element
+            .set_class_name("accordion-content inner-accordion-content");
+
+        // R
+        {
+            let ambient_r_input_range = create_range_input(
+                "ambient-range-r",
+                scene_value.parameters.light_parameters.ambient_light_color[0],
+                "0.0",
+                "1.0",
+                "0.01",
+            );
+            let ambient_r_input_range_text = create_range_value_text(
+                "ambient-range-r-text",
+                scene_value.parameters.light_parameters.ambient_light_color[0],
+            );
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                let ambient_range_r_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_r_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-r")
+                                .unwrap();
+                            let range_r_element: web_sys::HtmlInputElement =
+                                range_r_element.dyn_into().unwrap();
+                            let value: String = range_r_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.light_parameters.ambient_light_color[0] =
+                                value.parse::<f32>().unwrap();
+
+                            let range_r_text_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-r-text")
+                                .unwrap();
+                            range_r_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                ambient_r_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        ambient_range_r_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                ambient_range_r_closure.forget();
+            }
+
+            let ambient_r_element =
+                widget_row!("R", &ambient_r_input_range, &ambient_r_input_range_text);
+
+            ambient_accordion_content_element
+                .append_child(&ambient_r_element)
+                .unwrap();
+        }
+
+        // G
+        {
+            let ambient_g_input_range = create_range_input(
+                "ambient-range-g",
+                scene_value.parameters.light_parameters.ambient_light_color[1],
+                "0.0",
+                "1.0",
+                "0.01",
+            );
+            let ambient_g_input_range_text = create_range_value_text(
+                "ambient-range-g-text",
+                scene_value.parameters.light_parameters.ambient_light_color[1],
+            );
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                let ambient_range_g_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_g_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-g")
+                                .unwrap();
+                            let range_g_element: web_sys::HtmlInputElement =
+                                range_g_element.dyn_into().unwrap();
+                            let value: String = range_g_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.light_parameters.ambient_light_color[1] =
+                                value.parse::<f32>().unwrap();
+
+                            let range_g_text_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-g-text")
+                                .unwrap();
+                            range_g_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                ambient_g_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        ambient_range_g_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                ambient_range_g_closure.forget();
+            }
+
+            let ambient_g_element =
+                widget_row!("G", &ambient_g_input_range, &ambient_g_input_range_text);
+
+            ambient_accordion_content_element
+                .append_child(&ambient_g_element)
+                .unwrap();
+        }
+
+        // B
+        {
+            let ambient_b_input_range = create_range_input(
+                "ambient-range-b",
+                scene_value.parameters.light_parameters.ambient_light_color[2],
+                "0.0",
+                "1.0",
+                "0.01",
+            );
+            let ambient_b_input_range_text = create_range_value_text(
+                "ambient-range-b-text",
+                scene_value.parameters.light_parameters.ambient_light_color[2],
+            );
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                let ambient_range_b_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_b_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-b")
+                                .unwrap();
+                            let range_b_element: web_sys::HtmlInputElement =
+                                range_b_element.dyn_into().unwrap();
+                            let value: String = range_b_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.light_parameters.ambient_light_color[2] =
+                                value.parse::<f32>().unwrap();
+
+                            let range_b_text_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-b-text")
+                                .unwrap();
+                            range_b_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                ambient_b_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        ambient_range_b_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                ambient_range_b_closure.forget();
+            }
+
+            let ambient_b_element =
+                widget_row!("B", &ambient_b_input_range, &ambient_b_input_range_text);
+
+            ambient_accordion_content_element
+                .append_child(&ambient_b_element)
+                .unwrap();
+        }
+
+        // Intensity
+        {
+            let ambient_intensity_input_range = create_range_input(
+                "ambient-range-intensity",
+                scene_value.parameters.light_parameters.ambient_light_color[3],
+                "0.0",
+                "10.0",
+                "0.01",
+            );
+            let ambient_intensity_input_range_text = create_range_value_text(
+                "ambient-range-intensity-text",
+                scene_value.parameters.light_parameters.ambient_light_color[3],
+            );
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+
+                let ambient_range_intensity_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_intensity_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-intensity")
+                                .unwrap();
+                            let range_intensity_element: web_sys::HtmlInputElement =
+                                range_intensity_element.dyn_into().unwrap();
+                            let value: String = range_intensity_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.light_parameters.ambient_light_color[3] =
+                                value.parse::<f32>().unwrap();
+
+                            let range_intensity_text_element: web_sys::Element = gloo::utils::document()
+                                .get_element_by_id("ambient-range-intensity-text")
+                                .unwrap();
+                            range_intensity_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                ambient_intensity_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        ambient_range_intensity_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                ambient_range_intensity_closure.forget();
+            }
+
+            let ambient_intensity_element = widget_row!(
+                "Intensity",
+                &ambient_intensity_input_range,
+                &ambient_intensity_input_range_text,
+            );
+
+            ambient_accordion_content_element
+                .append_child(&ambient_intensity_element)
+                .unwrap();
+        }
+
+        accordion_content_element
+            .append_child(&ambient_accordion_input_element)
+            .unwrap();
+        accordion_content_element
+            .append_child(&ambient_accordion_label_element)
+            .unwrap();
+        accordion_content_element
+            .append_child(&ambient_accordion_content_element)
             .unwrap();
     }
 
@@ -704,6 +963,8 @@ fn create_debug_dialog_base_pass(parent: &web_sys::Element, scene: &Shared<engin
                     ("depth", "depth"),
                     ("albedo", "albedo"),
                     ("metallic", "metallic"),
+                    ("roughness", "roughness"),
+                    ("specular", "specular"),
                 ],
                 None,
             );
@@ -728,6 +989,8 @@ fn create_debug_dialog_base_pass(parent: &web_sys::Element, scene: &Shared<engin
                                 "depth" => scene_value.parameters.differed_debug_type = 2,
                                 "albedo" => scene_value.parameters.differed_debug_type = 3,
                                 "metallic" => scene_value.parameters.differed_debug_type = 4,
+                                "roughness" => scene_value.parameters.differed_debug_type = 5,
+                                "specular" => scene_value.parameters.differed_debug_type = 6,
                                 _ => scene_value.parameters.differed_debug_type = 0,
                             }
                         },

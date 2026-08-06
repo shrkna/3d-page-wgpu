@@ -136,6 +136,21 @@ fn load_4byte_to_u32(bytes: &[u8]) -> u32 {
     return out_value;
 }
 
+fn srgb_to_linear(v: f32) -> f32 {
+    if v <= 0.04045 {
+        v / 12.92
+    } else {
+        ((v + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(v: f32) -> f32 {
+    if v <= 0.0031308 {
+        v * 12.92
+    } else {
+        1.055 * v.powf(1.0 / 2.4) - 0.055
+    }
+}
 // public
 
 pub async fn load_gltf_scene(
@@ -288,7 +303,7 @@ pub async fn load_gltf_scene(
                 let direction = (rotation * glam::Vec3::NEG_Z).normalize_or_zero();
                 out_light_parameters.directional_light_angle = direction.to_array();
 
-                out_light_parameters.directional_light_intensity = light.intensity() / 1000.0; // Convert 
+                out_light_parameters.directional_light_intensity = light.intensity() / ( 10000.0 ); // Convert to Lux
                 break;
             }
         }
@@ -548,6 +563,40 @@ async fn get_gltf_material<'a>(
         }
     }
 
+    if !base_color_texture_data.is_empty() {
+        for pixel in base_color_texture_data.chunks_exact_mut(4) {
+            let r_linear = srgb_to_linear(pixel[0] as f32 / 255.0);
+            let g_linear = srgb_to_linear(pixel[1] as f32 / 255.0);
+            let b_linear = srgb_to_linear(pixel[2] as f32 / 255.0);
+
+            let r_out = linear_to_srgb((r_linear * base_color_factor[0]).clamp(0.0, 1.0));
+            let g_out = linear_to_srgb((g_linear * base_color_factor[1]).clamp(0.0, 1.0));
+            let b_out = linear_to_srgb((b_linear * base_color_factor[2]).clamp(0.0, 1.0));
+
+            pixel[0] = (r_out * 255.0).round() as u8;
+            pixel[1] = (g_out * 255.0).round() as u8;
+            pixel[2] = (b_out * 255.0).round() as u8;
+            // Alpha uses linear transfer in glTF.
+            pixel[3] = ((pixel[3] as f32 / 255.0) * base_color_factor[3])
+                .clamp(0.0, 1.0)
+                .mul_add(255.0, 0.0)
+                .round() as u8;
+        }
+    }
+
+    if !metallic_roughness_texture_data.is_empty() {
+        for pixel in metallic_roughness_texture_data.chunks_exact_mut(4) {
+            pixel[1] = ((pixel[1] as f32 / 255.0) * roughness_factor)
+                .clamp(0.0, 1.0)
+                .mul_add(255.0, 0.0)
+                .round() as u8;
+            pixel[2] = ((pixel[2] as f32 / 255.0) * metallic_factor)
+                .clamp(0.0, 1.0)
+                .mul_add(255.0, 0.0)
+                .round() as u8;
+        }
+    }
+
     // KHR_materials_pbrSpecularGlossiness
     let pbr_specular_glossiness = material.pbr_specular_glossiness();
     if pbr_specular_glossiness.is_some() {
@@ -580,9 +629,12 @@ async fn get_gltf_material<'a>(
     // empty texture
     if base_color_texture_data.is_empty() {
         base_color_texture_size = [1, 1];
-        base_color_texture_data = base_color_factor
-            .map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() as u8)
-            .to_vec();
+        base_color_texture_data = vec![
+            (linear_to_srgb(base_color_factor[0].clamp(0.0, 1.0)) * 255.0).round() as u8,
+            (linear_to_srgb(base_color_factor[1].clamp(0.0, 1.0)) * 255.0).round() as u8,
+            (linear_to_srgb(base_color_factor[2].clamp(0.0, 1.0)) * 255.0).round() as u8,
+            (base_color_factor[3].clamp(0.0, 1.0) * 255.0).round() as u8,
+        ];
     }
     if normal_texture_data.is_empty() {
         normal_texture_data = [128, 128, 255, 255].to_vec();

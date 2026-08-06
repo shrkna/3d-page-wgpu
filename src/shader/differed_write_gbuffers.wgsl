@@ -3,6 +3,7 @@ struct VertexOutput {
 	@location(0)       normal     : vec3<f32>,
     @location(1)       uv         : vec2<f32>,
     @location(2)       tangent    : vec4<f32>,
+    @location(3)       world_pos  : vec3<f32>,
 };
 
 struct FragmentOutput {
@@ -44,6 +45,7 @@ fn vs_main(
     output.normal    = normal_world;
     output.uv        = uv;
     output.tangent   = vec4<f32>(tangent_world, tangent.w);
+    output.world_pos = (inUniform.model_matrix * position).xyz;
 
     return output;
 }
@@ -58,7 +60,7 @@ fn fs_main(vertex: VertexOutput) -> FragmentOutput
 
 	var output : FragmentOutput;
 
-    output.position = vertex.position;
+    output.position = vec4<f32>(vertex.world_pos, 1.0);
     output.normal   = vec4<f32>(normalize(tbn_matrix * surface_normal), 1.0);
     output.albedo   = textureSample(base_color_texture, base_color_sampler, vertex.uv);
     output.metallic = textureSample(metallic_roughness_texture, metallic_roughness_sampler, vertex.uv);

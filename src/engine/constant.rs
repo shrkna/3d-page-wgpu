@@ -8,7 +8,7 @@ pub const VS_ENTRY_POINT: &str = "vs_main";
 pub const FS_ENTRY_POINT: &str = "fs_main";
 
 // .gltf files
-pub const GLTF_SCENE_TORUS_PATH: &str = "scenes/scene_torus.gltf";
+pub const GLTF_SCENE_TORUS_PATH: &str = "scene/scene_torus.gltf";
 
 // .gltf from Sketchfab (https://sketchfab.com)
 pub const GLTF_LOGO_PATH: &str = "resource/gltf_logo/scene.gltf";
