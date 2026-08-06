@@ -1527,76 +1527,661 @@ fn create_debug_dialog_postprocess(
                 .unwrap();
         }
 
-        // tone mapping
+        // exposure
         {
-            let tone_mapping_element: web_sys::Element =
+            let composite_exposure_element: web_sys::Element =
                 gloo::utils::document().create_element("div").unwrap();
-            tone_mapping_element.set_class_name("widget-row");
+            composite_exposure_element.set_class_name("widget-row");
 
-            let tone_mapping_label_element: web_sys::Element =
+            let composite_exposure_label_element: web_sys::Element =
                 gloo::utils::document().create_element("div").unwrap();
-            tone_mapping_label_element.set_class_name("widget-label");
-            tone_mapping_label_element.set_text_content(Some("Tone Mapping"));
+            composite_exposure_label_element.set_class_name("widget-label");
+            composite_exposure_label_element.set_text_content(Some("Exposure"));
 
-            let tone_mapping_content_element =
+            let composite_exposure_content_element =
                 gloo::utils::document().create_element("div").unwrap();
-            tone_mapping_content_element.set_class_name("widget-value");
+            composite_exposure_content_element.set_class_name("widget-value");
+
+            let composite_exposure_input_range: web_sys::Element =
+                gloo::utils::document().create_element("input").unwrap();
+            let composite_exposure_input_range: web_sys::HtmlInputElement =
+                composite_exposure_input_range.dyn_into().unwrap();
+            composite_exposure_input_range.set_id("composite-exposure-range");
+            composite_exposure_input_range.set_class_name("range-element");
+            composite_exposure_input_range
+                .set_attribute("type", "range")
+                .unwrap();
+            composite_exposure_input_range
+                .set_attribute("min", "-3.0")
+                .unwrap();
+            composite_exposure_input_range
+                .set_attribute("max", "3.0")
+                .unwrap();
+            composite_exposure_input_range
+                .set_attribute("step", "0.01")
+                .unwrap();
+            composite_exposure_input_range.set_value(
+                scene_value.parameters.composite_exposure.to_string().as_str(),
+            );
+
+            let composite_exposure_input_range_text: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_exposure_input_range_text.set_id("composite-exposure-range-text");
+            composite_exposure_input_range_text.set_class_name("range-text-element");
+            composite_exposure_input_range_text.set_text_content(Some(
+                scene_value.parameters.composite_exposure.to_string().as_str(),
+            ));
 
             {
-                let tone_mapping_input_checkbox: web_sys::Element =
-                    gloo::utils::document().create_element("input").unwrap();
-                let tone_mapping_input_checkbox: web_sys::HtmlInputElement =
-                    tone_mapping_input_checkbox.dyn_into().unwrap();
-                tone_mapping_input_checkbox.set_id("tone-mapping-active");
-                tone_mapping_input_checkbox.set_class_name("checkbox-element");
-                tone_mapping_input_checkbox
-                    .set_attribute("type", "checkbox")
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_exposure_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-exposure-range").unwrap();
+                            let range_element: web_sys::HtmlInputElement =
+                                range_element.dyn_into().unwrap();
+                            let value: String = range_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.composite_exposure = value.parse::<f32>().unwrap();
+
+                            let range_text_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-exposure-range-text").unwrap();
+                            range_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_exposure_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        composite_exposure_closure.as_ref().unchecked_ref(),
+                    )
                     .unwrap();
-                tone_mapping_input_checkbox.set_checked(scene_value.parameters.is_use_tone_mapping);
-
-                {
-                    let scene_clone: Shared<engine::scene::Scene> = scene.clone();
-
-                    let tone_mapping_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
-                        wasm_bindgen::closure::Closure::wrap(Box::new(
-                            move |_event: web_sys::InputEvent| {
-                                let tone_mapping_element: web_sys::Element =
-                                    gloo::utils::document()
-                                        .get_element_by_id("tone-mapping-active")
-                                        .unwrap();
-                                let tone_mapping_element: web_sys::HtmlInputElement =
-                                    tone_mapping_element.dyn_into().unwrap();
-                                let value: bool = tone_mapping_element.checked();
-
-                                let mut scene_value = scene_clone.borrow_mut();
-                                scene_value.parameters.is_use_tone_mapping = value;
-                            },
-                        )
-                            as Box<dyn FnMut(_)>);
-
-                    tone_mapping_input_checkbox
-                        .add_event_listener_with_callback(
-                            "input",
-                            tone_mapping_closure.as_ref().unchecked_ref(),
-                        )
-                        .unwrap();
-                    tone_mapping_closure.forget();
-                }
-
-                tone_mapping_content_element
-                    .append_child(&tone_mapping_input_checkbox)
-                    .unwrap();
+                composite_exposure_closure.forget();
             }
 
-            tone_mapping_element
-                .append_child(&tone_mapping_label_element)
+            composite_exposure_content_element
+                .append_child(&composite_exposure_input_range)
                 .unwrap();
-            tone_mapping_element
-                .append_child(&tone_mapping_content_element)
+            composite_exposure_content_element
+                .append_child(&composite_exposure_input_range_text)
+                .unwrap();
+            composite_exposure_element
+                .append_child(&composite_exposure_label_element)
+                .unwrap();
+            composite_exposure_element
+                .append_child(&composite_exposure_content_element)
                 .unwrap();
 
             composite_accordion_content_element
-                .append_child(&tone_mapping_element)
+                .append_child(&composite_exposure_element)
+                .unwrap();
+        }
+
+        // saturation
+        {
+            let composite_saturation_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_saturation_element.set_class_name("widget-row");
+
+            let composite_saturation_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_saturation_label_element.set_class_name("widget-label");
+            composite_saturation_label_element.set_text_content(Some("Saturation"));
+
+            let composite_saturation_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_saturation_content_element.set_class_name("widget-value");
+
+            let composite_saturation_input_range: web_sys::Element =
+                gloo::utils::document().create_element("input").unwrap();
+            let composite_saturation_input_range: web_sys::HtmlInputElement =
+                composite_saturation_input_range.dyn_into().unwrap();
+            composite_saturation_input_range.set_id("composite-saturation-range");
+            composite_saturation_input_range.set_class_name("range-element");
+            composite_saturation_input_range
+                .set_attribute("type", "range")
+                .unwrap();
+            composite_saturation_input_range
+                .set_attribute("min", "0.0")
+                .unwrap();
+            composite_saturation_input_range
+                .set_attribute("max", "2.0")
+                .unwrap();
+            composite_saturation_input_range
+                .set_attribute("step", "0.01")
+                .unwrap();
+            composite_saturation_input_range.set_value(
+                scene_value.parameters.composite_saturation.to_string().as_str(),
+            );
+
+            let composite_saturation_input_range_text: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_saturation_input_range_text.set_id("composite-saturation-range-text");
+            composite_saturation_input_range_text.set_class_name("range-text-element");
+            composite_saturation_input_range_text.set_text_content(Some(
+                scene_value.parameters.composite_saturation.to_string().as_str(),
+            ));
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_saturation_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-saturation-range").unwrap();
+                            let range_element: web_sys::HtmlInputElement =
+                                range_element.dyn_into().unwrap();
+                            let value: String = range_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.composite_saturation = value.parse::<f32>().unwrap();
+
+                            let range_text_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-saturation-range-text").unwrap();
+                            range_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_saturation_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        composite_saturation_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                composite_saturation_closure.forget();
+            }
+
+            composite_saturation_content_element
+                .append_child(&composite_saturation_input_range)
+                .unwrap();
+            composite_saturation_content_element
+                .append_child(&composite_saturation_input_range_text)
+                .unwrap();
+            composite_saturation_element
+                .append_child(&composite_saturation_label_element)
+                .unwrap();
+            composite_saturation_element
+                .append_child(&composite_saturation_content_element)
+                .unwrap();
+
+            composite_accordion_content_element
+                .append_child(&composite_saturation_element)
+                .unwrap();
+        }
+
+        // tone mapping
+        {
+            let composite_tone_mapping_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_tone_mapping_element.set_class_name("widget-row");
+
+            let composite_tone_mapping_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_tone_mapping_label_element.set_class_name("widget-label");
+            composite_tone_mapping_label_element.set_text_content(Some("Tone Mapping"));
+
+            let composite_tone_mapping_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_tone_mapping_content_element.set_class_name("widget-value");
+
+            let composite_tone_mapping_select_element =
+                gloo::utils::document().create_element("select").unwrap();
+            composite_tone_mapping_select_element.set_class_name("select-element");
+            composite_tone_mapping_select_element.set_id("composite-tone-mapping-select");
+
+            let composite_tone_mapping_option_off =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_tone_mapping_option_off.set_text_content(Some("off"));
+            composite_tone_mapping_option_off.set_attribute("value", "off").unwrap();
+
+            let composite_tone_mapping_option_aces =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_tone_mapping_option_aces.set_text_content(Some("aces"));
+            composite_tone_mapping_option_aces.set_attribute("value", "aces").unwrap();
+
+            let composite_tone_mapping_option_filmic =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_tone_mapping_option_filmic.set_text_content(Some("filmic"));
+            composite_tone_mapping_option_filmic.set_attribute("value", "filmic").unwrap();
+
+            let composite_tone_mapping_option_agx =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_tone_mapping_option_agx.set_text_content(Some("agx"));
+            composite_tone_mapping_option_agx.set_attribute("value", "agx").unwrap();
+
+            match scene_value.parameters.tone_mapping_type {
+                engine::scene::ToneMappingType::Off => {
+                    composite_tone_mapping_option_off.set_attribute("selected", "")
+                }
+                engine::scene::ToneMappingType::Aces => {
+                    composite_tone_mapping_option_aces.set_attribute("selected", "")
+                }
+                engine::scene::ToneMappingType::Filmic => {
+                    composite_tone_mapping_option_filmic.set_attribute("selected", "")
+                }
+                engine::scene::ToneMappingType::Agx => {
+                    composite_tone_mapping_option_agx.set_attribute("selected", "")
+                }
+            }
+            .unwrap();
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_tone_mapping_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let select_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-tone-mapping-select").unwrap();
+                            let select_element: web_sys::HtmlSelectElement =
+                                select_element.dyn_into().unwrap();
+                            let value: String = select_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.tone_mapping_type = match value.as_str() {
+                                "off" => engine::scene::ToneMappingType::Off,
+                                "aces" => engine::scene::ToneMappingType::Aces,
+                                "filmic" => engine::scene::ToneMappingType::Filmic,
+                                "agx" => engine::scene::ToneMappingType::Agx,
+                                _ => engine::scene::ToneMappingType::Agx,
+                            };
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_tone_mapping_select_element
+                    .add_event_listener_with_callback(
+                        "change",
+                        composite_tone_mapping_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                composite_tone_mapping_closure.forget();
+            }
+
+            composite_tone_mapping_select_element
+                .append_child(&composite_tone_mapping_option_off)
+                .unwrap();
+            composite_tone_mapping_select_element
+                .append_child(&composite_tone_mapping_option_aces)
+                .unwrap();
+            composite_tone_mapping_select_element
+                .append_child(&composite_tone_mapping_option_filmic)
+                .unwrap();
+            composite_tone_mapping_select_element
+                .append_child(&composite_tone_mapping_option_agx)
+                .unwrap();
+
+            composite_tone_mapping_content_element
+                .append_child(&composite_tone_mapping_select_element)
+                .unwrap();
+            composite_tone_mapping_element
+                .append_child(&composite_tone_mapping_label_element)
+                .unwrap();
+            composite_tone_mapping_element
+                .append_child(&composite_tone_mapping_content_element)
+                .unwrap();
+
+            composite_accordion_content_element
+                .append_child(&composite_tone_mapping_element)
+                .unwrap();
+        }
+
+        // highlight rolloff
+        {
+            let composite_highlight_rolloff_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_highlight_rolloff_element.set_class_name("widget-row");
+
+            let composite_highlight_rolloff_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_highlight_rolloff_label_element.set_class_name("widget-label");
+            composite_highlight_rolloff_label_element.set_text_content(Some("Soft"));
+
+            let composite_highlight_rolloff_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_highlight_rolloff_content_element.set_class_name("widget-value");
+
+            let composite_highlight_rolloff_input_range: web_sys::Element =
+                gloo::utils::document().create_element("input").unwrap();
+            let composite_highlight_rolloff_input_range: web_sys::HtmlInputElement =
+                composite_highlight_rolloff_input_range.dyn_into().unwrap();
+            composite_highlight_rolloff_input_range.set_id("composite-highlight-rolloff-range");
+            composite_highlight_rolloff_input_range.set_class_name("range-element");
+            composite_highlight_rolloff_input_range
+                .set_attribute("type", "range")
+                .unwrap();
+            composite_highlight_rolloff_input_range
+                .set_attribute("min", "0.0")
+                .unwrap();
+            composite_highlight_rolloff_input_range
+                .set_attribute("max", "1.0")
+                .unwrap();
+            composite_highlight_rolloff_input_range
+                .set_attribute("step", "0.01")
+                .unwrap();
+            composite_highlight_rolloff_input_range.set_value(
+                scene_value.parameters.composite_highlight_rolloff.to_string().as_str(),
+            );
+
+            let composite_highlight_rolloff_input_range_text: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_highlight_rolloff_input_range_text.set_id("composite-highlight-rolloff-range-text");
+            composite_highlight_rolloff_input_range_text.set_class_name("range-text-element");
+            composite_highlight_rolloff_input_range_text.set_text_content(Some(
+                scene_value.parameters.composite_highlight_rolloff.to_string().as_str(),
+            ));
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_highlight_rolloff_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-highlight-rolloff-range").unwrap();
+                            let range_element: web_sys::HtmlInputElement =
+                                range_element.dyn_into().unwrap();
+                            let value: String = range_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.composite_highlight_rolloff = value.parse::<f32>().unwrap();
+
+                            let range_text_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-highlight-rolloff-range-text").unwrap();
+                            range_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_highlight_rolloff_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        composite_highlight_rolloff_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                composite_highlight_rolloff_closure.forget();
+            }
+
+            composite_highlight_rolloff_content_element
+                .append_child(&composite_highlight_rolloff_input_range)
+                .unwrap();
+            composite_highlight_rolloff_content_element
+                .append_child(&composite_highlight_rolloff_input_range_text)
+                .unwrap();
+            composite_highlight_rolloff_element
+                .append_child(&composite_highlight_rolloff_label_element)
+                .unwrap();
+            composite_highlight_rolloff_element
+                .append_child(&composite_highlight_rolloff_content_element)
+                .unwrap();
+
+            composite_accordion_content_element
+                .append_child(&composite_highlight_rolloff_element)
+                .unwrap();
+        }
+
+        // white point
+        {
+            let composite_white_point_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_white_point_element.set_class_name("widget-row");
+
+            let composite_white_point_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_white_point_label_element.set_class_name("widget-label");
+            composite_white_point_label_element.set_text_content(Some("White"));
+
+            let composite_white_point_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_white_point_content_element.set_class_name("widget-value");
+
+            let composite_white_point_input_range: web_sys::Element =
+                gloo::utils::document().create_element("input").unwrap();
+            let composite_white_point_input_range: web_sys::HtmlInputElement =
+                composite_white_point_input_range.dyn_into().unwrap();
+            composite_white_point_input_range.set_id("composite-white-point-range");
+            composite_white_point_input_range.set_class_name("range-element");
+            composite_white_point_input_range
+                .set_attribute("type", "range")
+                .unwrap();
+            composite_white_point_input_range
+                .set_attribute("min", "0.1")
+                .unwrap();
+            composite_white_point_input_range
+                .set_attribute("max", "4.0")
+                .unwrap();
+            composite_white_point_input_range
+                .set_attribute("step", "0.01")
+                .unwrap();
+            composite_white_point_input_range.set_value(
+                scene_value.parameters.composite_white_point.to_string().as_str(),
+            );
+
+            let composite_white_point_input_range_text: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_white_point_input_range_text.set_id("composite-white-point-range-text");
+            composite_white_point_input_range_text.set_class_name("range-text-element");
+            composite_white_point_input_range_text.set_text_content(Some(
+                scene_value.parameters.composite_white_point.to_string().as_str(),
+            ));
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_white_point_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let range_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-white-point-range").unwrap();
+                            let range_element: web_sys::HtmlInputElement =
+                                range_element.dyn_into().unwrap();
+                            let value: String = range_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.composite_white_point = value.parse::<f32>().unwrap();
+
+                            let range_text_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-white-point-range-text").unwrap();
+                            range_text_element.set_text_content(Some(&value));
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_white_point_input_range
+                    .add_event_listener_with_callback(
+                        "input",
+                        composite_white_point_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                composite_white_point_closure.forget();
+            }
+
+            composite_white_point_content_element
+                .append_child(&composite_white_point_input_range)
+                .unwrap();
+            composite_white_point_content_element
+                .append_child(&composite_white_point_input_range_text)
+                .unwrap();
+            composite_white_point_element
+                .append_child(&composite_white_point_label_element)
+                .unwrap();
+            composite_white_point_element
+                .append_child(&composite_white_point_content_element)
+                .unwrap();
+
+            composite_accordion_content_element
+                .append_child(&composite_white_point_element)
+                .unwrap();
+        }
+
+        // view transform
+        {
+            let composite_view_transform_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_view_transform_element.set_class_name("widget-row");
+
+            let composite_view_transform_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_view_transform_label_element.set_class_name("widget-label");
+            composite_view_transform_label_element.set_text_content(Some("View Trans"));
+
+            let composite_view_transform_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_view_transform_content_element.set_class_name("widget-value");
+
+            let composite_view_transform_select_element =
+                gloo::utils::document().create_element("select").unwrap();
+            composite_view_transform_select_element.set_class_name("select-element");
+            composite_view_transform_select_element.set_id("composite-view-transform-select");
+
+            let composite_view_transform_option_standard =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_view_transform_option_standard.set_text_content(Some("standard"));
+            composite_view_transform_option_standard
+                .set_attribute("value", "standard")
+                .unwrap();
+
+            let composite_view_transform_option_agx =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_view_transform_option_agx.set_text_content(Some("agx"));
+            composite_view_transform_option_agx
+                .set_attribute("value", "agx")
+                .unwrap();
+
+            let composite_view_transform_option_filmic =
+                gloo::utils::document().create_element("option").unwrap();
+            composite_view_transform_option_filmic.set_text_content(Some("filmic"));
+            composite_view_transform_option_filmic
+                .set_attribute("value", "filmic")
+                .unwrap();
+
+            match scene_value.parameters.composite_view_transform {
+                engine::scene::CompositeViewTransform::Standard => {
+                    composite_view_transform_option_standard.set_attribute("selected", "")
+                }
+                engine::scene::CompositeViewTransform::Agx => {
+                    composite_view_transform_option_agx.set_attribute("selected", "")
+                }
+                engine::scene::CompositeViewTransform::Filmic => {
+                    composite_view_transform_option_filmic.set_attribute("selected", "")
+                }
+            }
+            .unwrap();
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_view_transform_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let select_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-view-transform-select").unwrap();
+                            let select_element: web_sys::HtmlSelectElement =
+                                select_element.dyn_into().unwrap();
+                            let value: String = select_element.value();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.composite_view_transform = match value.as_str() {
+                                "standard" => engine::scene::CompositeViewTransform::Standard,
+                                "agx" => engine::scene::CompositeViewTransform::Agx,
+                                "filmic" => engine::scene::CompositeViewTransform::Filmic,
+                                _ => engine::scene::CompositeViewTransform::Agx,
+                            };
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_view_transform_select_element
+                    .add_event_listener_with_callback(
+                        "change",
+                        composite_view_transform_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                composite_view_transform_closure.forget();
+            }
+
+            composite_view_transform_select_element
+                .append_child(&composite_view_transform_option_standard)
+                .unwrap();
+            composite_view_transform_select_element
+                .append_child(&composite_view_transform_option_agx)
+                .unwrap();
+            composite_view_transform_select_element
+                .append_child(&composite_view_transform_option_filmic)
+                .unwrap();
+
+            composite_view_transform_content_element
+                .append_child(&composite_view_transform_select_element)
+                .unwrap();
+            composite_view_transform_element
+                .append_child(&composite_view_transform_label_element)
+                .unwrap();
+            composite_view_transform_element
+                .append_child(&composite_view_transform_content_element)
+                .unwrap();
+
+            composite_accordion_content_element
+                .append_child(&composite_view_transform_element)
+                .unwrap();
+        }
+
+        // dither
+        {
+            let composite_dither_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_dither_element.set_class_name("widget-row");
+
+            let composite_dither_label_element: web_sys::Element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_dither_label_element.set_class_name("widget-label");
+            composite_dither_label_element.set_text_content(Some("Dithered"));
+
+            let composite_dither_content_element =
+                gloo::utils::document().create_element("div").unwrap();
+            composite_dither_content_element.set_class_name("widget-value");
+
+            let composite_dither_input_checkbox: web_sys::Element =
+                gloo::utils::document().create_element("input").unwrap();
+            let composite_dither_input_checkbox: web_sys::HtmlInputElement =
+                composite_dither_input_checkbox.dyn_into().unwrap();
+            composite_dither_input_checkbox.set_id("composite-dither-active");
+            composite_dither_input_checkbox.set_class_name("checkbox-element");
+            composite_dither_input_checkbox
+                .set_attribute("type", "checkbox")
+                .unwrap();
+            composite_dither_input_checkbox.set_checked(scene_value.parameters.composite_use_dither);
+
+            {
+                let scene_clone: Shared<engine::scene::Scene> = scene.clone();
+                let composite_dither_closure: wasm_bindgen::prelude::Closure<dyn FnMut(_)> =
+                    wasm_bindgen::closure::Closure::wrap(Box::new(
+                        move |_event: web_sys::InputEvent| {
+                            let composite_dither_element: web_sys::Element =
+                                gloo::utils::document().get_element_by_id("composite-dither-active").unwrap();
+                            let composite_dither_element: web_sys::HtmlInputElement =
+                                composite_dither_element.dyn_into().unwrap();
+                            let value: bool = composite_dither_element.checked();
+
+                            let mut scene_value = scene_clone.borrow_mut();
+                            scene_value.parameters.composite_use_dither = value;
+                        },
+                    ) as Box<dyn FnMut(_)>);
+
+                composite_dither_input_checkbox
+                    .add_event_listener_with_callback(
+                        "input",
+                        composite_dither_closure.as_ref().unchecked_ref(),
+                    )
+                    .unwrap();
+                composite_dither_closure.forget();
+            }
+
+            composite_dither_content_element
+                .append_child(&composite_dither_input_checkbox)
+                .unwrap();
+            composite_dither_element
+                .append_child(&composite_dither_label_element)
+                .unwrap();
+            composite_dither_element
+                .append_child(&composite_dither_content_element)
+                .unwrap();
+
+            composite_accordion_content_element
+                .append_child(&composite_dither_element)
                 .unwrap();
         }
 

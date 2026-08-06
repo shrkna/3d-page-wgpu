@@ -74,9 +74,18 @@ pub struct WebGPUCompositeShadingResource {
     pub render_pipeline: wgpu::RenderPipeline,
 }
 
+#[repr(C)]
 pub struct CompositeUniformBuffer {
-    pub _is_use_tone_mapping: f32,
+    pub _exposure: f32,
+    pub _saturation: f32,
+    pub _tone_mapping_mode: f32,
+    pub _highlight_rolloff: f32,
+    pub _white_point: f32,
+    pub _view_transform: f32,
+    pub _use_dither: f32,
     pub _is_use_gamma_correction: f32,
+    pub _padding0: f32,
+    pub _padding1: f32,
 }
 
 fn create_composite_shader_resource(interface: &WebGPUInterface) -> WebGPUCompositeShadingResource {
@@ -249,17 +258,31 @@ fn update_composite_uniform_buffer(
     scene: &Shared<engine::scene::Scene>,
     global_resources: &mut WebGPUUniqueResources,
 ) {
-    let is_use_tone_mapping: f32 = if scene.borrow().parameters.is_use_tone_mapping {
-        1.0
-    } else {
-        0.0
+    let scene_parameters = scene.borrow();
+    let tone_mapping_mode: f32 = match scene_parameters.parameters.tone_mapping_type {
+        engine::scene::ToneMappingType::Off => 0.0,
+        engine::scene::ToneMappingType::Aces => 1.0,
+        engine::scene::ToneMappingType::Filmic => 2.0,
+        engine::scene::ToneMappingType::Agx => 3.0,
     };
 
-    let is_use_gamma_correction: f32 = if scene.borrow().parameters.is_use_gamma_correction {
+    let is_use_gamma_correction: f32 = if scene_parameters.parameters.is_use_gamma_correction {
         1.0
     } else {
         0.0
     };
+    let exposure = scene_parameters.parameters.composite_exposure;
+    let saturation = scene_parameters.parameters.composite_saturation;
+    let highlight_rolloff = scene_parameters.parameters.composite_highlight_rolloff;
+    let white_point = scene_parameters.parameters.composite_white_point;
+    let view_transform = match scene_parameters.parameters.composite_view_transform {
+        engine::scene::CompositeViewTransform::Standard => 0.0,
+        engine::scene::CompositeViewTransform::Agx => 1.0,
+        engine::scene::CompositeViewTransform::Filmic => 2.0,
+    };
+    let use_dither = if scene_parameters.parameters.composite_use_dither { 1.0 } else { 0.0 };
+    drop(scene_parameters);
+
     interface.queue.write_buffer(
         &global_resources
             .composite_shading_resource
@@ -267,6 +290,16 @@ fn update_composite_uniform_buffer(
             .unwrap()
             .uniform_buffer,
         0,
-        bytemuck::cast_slice(&[is_use_tone_mapping, is_use_gamma_correction]),
+        bytemuck::cast_slice(&[
+            exposure,
+            saturation,
+            tone_mapping_mode,
+            highlight_rolloff,
+            white_point,
+            view_transform,
+            use_dither,
+            is_use_gamma_correction,
+            0.0,
+        ]),
     );
 }

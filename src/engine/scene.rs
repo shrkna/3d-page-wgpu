@@ -57,13 +57,36 @@ pub struct SceneParameter {
     pub is_use_bloom: bool,
     pub bloom_threshold: f32,
     pub is_use_composite: bool,
-    pub is_use_tone_mapping: bool,
+    pub tone_mapping_type: ToneMappingType,
     pub is_use_gamma_correction: bool,
+    pub composite_exposure: f32,
+    pub composite_saturation: f32,
+    pub composite_highlight_rolloff: f32,
+    pub composite_white_point: f32,
+    pub composite_view_transform: CompositeViewTransform,
+    pub composite_use_dither: bool,
     // overlay
     pub is_use_grid: bool,
     // other config
     pub is_first_update: bool,
     pub is_convert_y_to_z: bool,
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum ToneMappingType {
+    Off,
+    Aces,
+    Filmic,
+    #[default]
+    Agx,
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
+pub enum CompositeViewTransform {
+    #[default]
+    Standard,
+    Agx,
+    Filmic,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -111,7 +134,7 @@ impl SceneParameter {
             light_parameters: SceneLightParameter {
                 directional_light_angle: [0.5, 1.0, -1.0],
                 directional_light_intensity: 1.0,
-                ambient_light_color: [0.05, 0.05, 0.05, 1.0],
+                ambient_light_color: [0.01, 0.01, 0.01, 1.0],
             },
             // rendering
             scene_shading_type: ShadingType::Differed,
@@ -124,8 +147,14 @@ impl SceneParameter {
             is_use_bloom: true,
             bloom_threshold: 1.5,
             is_use_composite: true,
-            is_use_tone_mapping: true,
+            tone_mapping_type: ToneMappingType::Agx,
             is_use_gamma_correction: true,
+            composite_exposure: 0.0,
+            composite_saturation: 1.0,
+            composite_highlight_rolloff: 0.25,
+            composite_white_point: 1.0,
+            composite_view_transform: CompositeViewTransform::Agx,
+            composite_use_dither: true,
             // overlay
             is_use_grid: true,
             // other config
