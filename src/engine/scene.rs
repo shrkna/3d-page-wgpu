@@ -144,10 +144,10 @@ impl SceneParameter {
             // sky box
             is_use_sky_box: false,
             // postprocess
-            is_use_bloom: true,
+            is_use_bloom: false,
             bloom_threshold: 1.5,
             is_use_composite: true,
-            tone_mapping_type: ToneMappingType::Agx,
+            tone_mapping_type: ToneMappingType::Off,
             is_use_gamma_correction: true,
             composite_exposure: 0.0,
             composite_saturation: 1.0,

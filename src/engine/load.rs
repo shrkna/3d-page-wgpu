@@ -303,7 +303,7 @@ pub async fn load_gltf_scene(
                 let direction = (rotation * glam::Vec3::NEG_Z).normalize_or_zero();
                 out_light_parameters.directional_light_angle = direction.to_array();
 
-                out_light_parameters.directional_light_intensity = light.intensity() / ( 10000.0 ); // Convert to Lux
+                out_light_parameters.directional_light_intensity = light.intensity() / ( 683.0); // convert from lumen to watt
                 break;
             }
         }

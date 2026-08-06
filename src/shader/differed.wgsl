@@ -19,43 +19,44 @@ struct Uniform
 @group(2) @binding(2) var s_env          : sampler;
 
 const PI : f32 = radians(180.0);
+const GGX_D_EPSILON : f32 = 0.0000001;
+const GGX_VIS_EPSILON : f32 = 0.0000001;
 
 // pbr utility
 
 fn distribution_GGX(normal : vec3<f32>, half : vec3<f32>, roughness : f32) -> f32
 {
-  let a        : f32 = roughness * roughness;
-  let a2       : f32 = a * a;
+  let alpha    : f32 = roughness * roughness;
+  let alpha2   : f32 = alpha * alpha;
     let n_dot_h  : f32 = max(dot(normal, half), 0.0);
     let n_dot_h2 : f32 = n_dot_h * n_dot_h;
 	
-    let nom   : f32    = a2;
-    var denom : f32    = (n_dot_h2 * (a2 - 1.0) + 1.0);
+    let nom   : f32    = alpha2;
+    var denom : f32    = (n_dot_h2 * (alpha2 - 1.0) + 1.0);
     denom              = PI * denom * denom;
 	
-  return nom / max(denom, 0.0001);
+  return nom / max(denom, GGX_D_EPSILON);
 }
-fn geometry_schlick_GGX(n_dot_v : f32, roughness : f32) -> f32
+// Smith height-correlated G2 folded into 1/(4*NdotL*NdotV) — matches Blender Principled BSDF
+fn visibility_GGX(n_dot_l: f32, n_dot_v: f32, roughness: f32) -> f32
 {
-  let r = roughness + 1.0;
-  let k = (r * r) / 8.0;
-    let nom   : f32 = n_dot_v;
-    let denom : f32 = n_dot_v * (1.0 - k) + k;
-	
-    return nom / denom;
-}
-fn geometry_smith(n: vec3<f32>, v : vec3<f32>, l : vec3<f32>, roughness : f32) -> f32
-{
-    let n_dot_v : f32 = max(dot(n, v), 0.0);
-    let n_dot_l : f32 = max(dot(n, l), 0.0);
-  let ggx1 : f32 = geometry_schlick_GGX(n_dot_v, roughness);
-  let ggx2 : f32 = geometry_schlick_GGX(n_dot_l, roughness);
-	
-    return ggx1 * ggx2;
+    let a  = roughness * roughness;
+    let a2 = a * a;
+    let lambda_v = n_dot_l * sqrt(n_dot_v * n_dot_v * (1.0 - a2) + a2);
+    let lambda_l = n_dot_v * sqrt(n_dot_l * n_dot_l * (1.0 - a2) + a2);
+  return 0.5 / max(lambda_v + lambda_l, GGX_VIS_EPSILON);
 }
 fn fresnel_schlick(cos_theta :f32, f0 : vec3<f32>) -> vec3<f32>
 {
     return f0 + (1.0 - f0) * pow(1.0 - cos_theta, 5.0);
+}
+// Burley (Disney) diffuse — Blender Principled BSDF diffuse lobe
+fn diffuse_burley(n_dot_l: f32, n_dot_v: f32, h_dot_v: f32, roughness: f32) -> f32
+{
+    let fd90 = 0.5 + 2.0 * roughness * h_dot_v * h_dot_v;
+    let f_l  = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_l, 5.0);
+    let f_v  = 1.0 + (fd90 - 1.0) * pow(1.0 - n_dot_v, 5.0);
+    return f_l * f_v / PI;
 }
 
 fn safe_normalize(v : vec3<f32>) -> vec3<f32>
@@ -96,16 +97,14 @@ fn pbr_direct_lighting(
   let base_reflectivity = vec3<f32>(0.04, 0.04, 0.04);
   let f0 = mix(base_reflectivity, albedo, vec3<f32>(metallic, metallic, metallic));
   let ndf = distribution_GGX(normal, half_vector, roughness);
-  let geometry = geometry_smith(normal, view, light, roughness);
+  let vis = visibility_GGX(n_dot_l, n_dot_v, roughness);
   let fresnel = fresnel_schlick(h_dot_v, f0);
 
-  let numerator = ndf * geometry * fresnel;
-  let denominator = max(4.0 * n_dot_v * n_dot_l, 0.0001);
-  let specular = numerator / denominator;
+  let specular = ndf * vis * fresnel;
 
   let ks = fresnel;
   let kd = (vec3<f32>(1.0, 1.0, 1.0) - ks) * (1.0 - metallic);
-  let diffuse = kd * albedo / PI;
+  let diffuse = kd * albedo * diffuse_burley(n_dot_l, n_dot_v, h_dot_v, roughness);
   let specular_contrib = specular * n_dot_l;
 
   return PbrLighting((diffuse + specular) * n_dot_l, specular_contrib);
@@ -130,14 +129,7 @@ fn pbr_ambient_diffuse_lighting(
   let hemi = normal.z * 0.5 + 0.5;
   let hemi_weight = mix(0.1, 1.0, clamp(hemi, 0.0, 1.0));
 
-  // Ambient color comes from UI controls and is treated as perceptual (sRGB-like) values.
-  // Convert to linear so low values like 0.2 do not over-brighten shadowed areas.
-  let ambient_linear = pow(
-    max(ambient_irradiance, vec3<f32>(0.0, 0.0, 0.0)),
-    vec3<f32>(2.2, 2.2, 2.2),
-  );
-
-  return kd * albedo * ambient_linear * hemi_weight / PI;
+  return kd * albedo * ambient_irradiance * hemi_weight / PI;
 }
 
 // render funcions

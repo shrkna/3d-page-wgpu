@@ -385,7 +385,7 @@ fn create_debug_dialog_environment(
                 "directional-range-intensity",
                 scene_value.parameters.light_parameters.directional_light_intensity,
                 "0.0",
-                "1.0",
+                "10.0",
                 "0.01",
             );
             let directional_intensity_input_range_text = create_range_value_text(
