@@ -45,16 +45,21 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32>
     let t = -in_uniform.camera_position.z / ray_dir.z;
 
     // 平面がカメラの後ろにある場合、または平行な場合は描画しない
-    if (t <= 0.0) { discard; }
-    // depthを見て交差しない場合は描画しない
-    if (in_uniform.camera_position.z * view_target.z > 0) {discard; }
+    if (t < 0.0) { discard; }
+    // 深度判定は少しだけファジーにして、z=0 付近の平面でもグリッドを表示できるようにする
+    let depth_epsilon = 1e-3;
+    if (abs(view_target.z) > depth_epsilon && in_uniform.camera_position.z * view_target.z > 0.0) { discard; }
 
     let world_pos = in_uniform.camera_position.xyz + ray_dir * t;
     let coord     = world_pos.xy;
 
     // 3. グリッドの描画 (1m単位)
+    // fwidth() で画面上の 1px あたりのワールド単位を取得し、
+    // カメラ距離に関わらず見た目の太さを一定にする。
     let grid_size  = 1.0;
-    let line_width = 0.005;
+    let line_width_pixels = in_uniform.line_thickness;
+    let coord_step = max(fwidth(coord.x), fwidth(coord.y));
+    let line_width = max(coord_step * line_width_pixels, 1e-5);
     let grid = abs(fract(coord / grid_size - 0.5) - 0.5) / (line_width * 0.5);
     var line = min(grid.x, grid.y);
     
@@ -63,8 +68,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32>
 
     // 4. 軸の色付け (X軸=赤, Y軸=緑)
     var grid_color = vec3f(0.3); // 通常の線はグレー
-    //if (abs(coord.y) < line_width) { grid_color = vec3f(1.0, 0.0, 0.0); } // X軸
-    //if (abs(coord.x) < line_width) { grid_color = vec3f(0.0, 1.0, 0.0); } // Y軸
+    if (abs(coord.y) < line_width) { grid_color = vec3f(1.0, 0.0, 0.0); } // X軸
+    if (abs(coord.x) < line_width) { grid_color = vec3f(0.0, 1.0, 0.0); } // Y軸
 
     // 距離に応じてフェードアウト（遠くのノイズを防ぐ）
     let opacity = color_mask * exp(-0.15 * t);
